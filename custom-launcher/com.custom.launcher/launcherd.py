@@ -581,11 +581,6 @@ def daemon(boot):
     signal.signal(signal.SIGINT, on_signal)
 
     log('daemon start pid=%d boot=%s' % (os.getpid(), boot))
-    try:
-        luna_fire('luna://com.webos.settingsservice/setSystemSettings',
-                  {'category': 'general', 'settings': {'homeAutoLaunch': 'off'}})
-    except Exception:
-        pass
     if not wait_for_sam(st):
         log('application manager not reachable, continuing anyway')
     first = refresh(timeout=15, wait=False)
