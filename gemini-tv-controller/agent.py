@@ -1,6 +1,7 @@
 """
 Gemini AI Agent with Function Calling for LG webOS TV Control.
-Uses Google Gemini API (gemini-2.0-flash or gemini-1.5-flash) via pure standard library urllib.
+Uses the Google Gemini API via pure standard library urllib.
+The model is configurable via GEMINI_MODEL (environment or .env).
 """
 
 import os
@@ -12,21 +13,37 @@ from tv import LGTV
 
 ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
 
-def get_api_key() -> str:
-    key = os.environ.get("GEMINI_API_KEY", "")
-    if not key and os.path.exists(ENV_FILE):
+DEFAULT_MODEL = "gemini-3.8-flash"
+
+def _env_value(name: str) -> str:
+    val = os.environ.get(name, "")
+    if not val and os.path.exists(ENV_FILE):
         try:
             with open(ENV_FILE, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line.startswith("GEMINI_API_KEY="):
-                        key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if line.startswith(name + "="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
                         break
         except Exception:
             pass
-    return key
+    return val
+
+def get_api_key() -> str:
+    return _env_value("GEMINI_API_KEY")
+
+def get_model() -> str:
+    return _env_value("GEMINI_MODEL") or DEFAULT_MODEL
+
+def _to_int(val, default: int = 1, lo: int = 1, hi: int = 20) -> int:
+    try:
+        n = int(float(val))
+    except (TypeError, ValueError):
+        n = default
+    return max(lo, min(hi, n))
 
 def save_api_key(key: str) -> None:
+    key = "".join(key.split())  # no whitespace/newlines -> no .env line injection
     lines = []
     if os.path.exists(ENV_FILE):
         try:
@@ -186,8 +203,10 @@ from smartthings import SmartThings
 def execute_tool(name: str, args: dict) -> dict:
     """Dispatches tool call to LGTV or SmartThings controller."""
     if name == "control_smart_device":
-        dev = args.get("device_name", "").lower()
-        st = args.get("state", "on").lower()
+        dev = str(args.get("device_name") or "").strip().lower()
+        st = str(args.get("state") or "on").strip().lower()
+        if not dev:
+            return {"error": "Kein Gerätename angegeben"}
         # Find matching device ID
         devices = SmartThings.get_dashboard_devices()
         matched = None
@@ -213,10 +232,10 @@ def execute_tool(name: str, args: dict) -> dict:
         LGTV.toast(f"Gemini: Eingang {inp.upper()}")
         return res
     elif name == "volume_up":
-        steps = int(args.get("steps", 1))
+        steps = _to_int(args.get("steps", 1))
         return LGTV.volume_up(steps)
     elif name == "volume_down":
-        steps = int(args.get("steps", 1))
+        steps = _to_int(args.get("steps", 1))
         return LGTV.volume_down(steps)
     elif name == "toggle_mute":
         return LGTV.mute()
@@ -250,7 +269,8 @@ class GeminiTVAgent:
                 "needs_key": True
             }
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={self.api_key}"
+        model = get_model()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         
         system_instruction = (
             "Du bist Gemini, der persönliche KI-Assistent auf einem High-End LG OLED G4 TV. "
@@ -280,22 +300,31 @@ class GeminiTVAgent:
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
+            # Key goes in a header, not the URL, so it never shows up in error strings or logs.
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key}
         )
 
         try:
             with urllib.request.urlopen(req, timeout=12) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="ignore")
+            err_body = e.read().decode("utf-8", errors="ignore")[:2000]
+            if e.code == 404:
+                hint = f"Modell '{model}' nicht gefunden. Setze GEMINI_MODEL in der .env auf ein gültiges Modell."
+            elif e.code in (400, 401, 403):
+                hint = "Bitte prüfe deinen API-Key."
+            elif e.code == 429:
+                hint = "Kontingent erschöpft, bitte später erneut versuchen."
+            else:
+                hint = "Gemini-Dienst nicht verfügbar."
             return {
-                "text": f"Fehler bei der Gemini-Verbindung: HTTP {e.code}. Bitte prüfe deinen API-Key.",
+                "text": f"Fehler bei der Gemini-Verbindung: HTTP {e.code}. {hint}",
                 "details": err_body,
                 "actions": []
             }
         except Exception as e:
             return {
-                "text": f"Verbindungsfehler: {e}",
+                "text": f"Verbindungsfehler: {type(e).__name__}",
                 "actions": []
             }
 
@@ -315,8 +344,13 @@ class GeminiTVAgent:
             if "functionCall" in part:
                 fc = part["functionCall"]
                 fn_name = fc.get("name")
-                fn_args = fc.get("args", {})
-                res = execute_tool(fn_name, fn_args)
+                fn_args = fc.get("args") or {}
+                if not isinstance(fn_args, dict):
+                    fn_args = {}
+                try:
+                    res = execute_tool(fn_name, fn_args)
+                except Exception as e:
+                    res = {"error": f"{fn_name} fehlgeschlagen: {type(e).__name__}"}
                 executed_actions.append({"tool": fn_name, "args": fn_args, "result": res})
             elif "text" in part:
                 model_text += part["text"]
@@ -333,10 +367,10 @@ class GeminiTVAgent:
                     inp_label = args.get("input_name", "").upper()
                     summaries.append(f"auf {inp_label} umgeschaltet")
                 elif t == "volume_down":
-                    st = args.get("steps", 1)
+                    st = _to_int(args.get("steps", 1))
                     summaries.append(f"die Lautstärke um {st} Stufe{'n' if st > 1 else ''} gesenkt")
                 elif t == "volume_up":
-                    st = args.get("steps", 1)
+                    st = _to_int(args.get("steps", 1))
                     summaries.append(f"die Lautstärke um {st} Stufe{'n' if st > 1 else ''} erhöht")
                 elif t == "toggle_mute":
                     summaries.append("die Stummschaltung umgeschaltet")

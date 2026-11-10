@@ -5,7 +5,28 @@
 #   Resume  rm /var/lib/webosbrew/custom-launcher.off
 #   Remove  delete this file, then uninstall "Home" in Homebrew Channel
 APP=/media/developer/apps/usr/palm/applications/com.custom.launcher
+LOG=/tmp/custom-launcher.log
+DEPLOYING=/tmp/custom-launcher.deploying
 [ -f "$APP/launcherd.py" ] || exit 0
+PY=$(command -v python3 2>/dev/null)
+if [ -z "$PY" ]; then
+  echo "$(date) boot hook: python3 not found (PATH=$PATH), helper not started" >> "$LOG"
+  exit 0
+fi
 # "start" detaches at once (own session, no inherited descriptors): boot hooks never wait on it.
-python3 "$APP/launcherd.py" start --boot </dev/null >/dev/null 2>&1
+"$PY" "$APP/launcherd.py" start --boot </dev/null >/dev/null 2>&1
+
+# Supervisor: if the helper dies (crash, OOM kill), start it again within a minute.
+# "start" is a no-op while it runs (lock file). Skipped while tools/deploy.sh is installing.
+(
+  while sleep 60; do
+    [ -f "$APP/launcherd.py" ] || exit 0          # app uninstalled: stop supervising
+    # honour the flag for at most 10 minutes, in case a failed deploy left it behind
+    [ -n "$(find "$DEPLOYING" -mmin -10 2>/dev/null)" ] && continue
+    if ! "$PY" "$APP/launcherd.py" status 2>/dev/null | grep -q '^running'; then
+      echo "$(date) supervisor: helper not running, restarting" >> "$LOG"
+      "$PY" "$APP/launcherd.py" start </dev/null >/dev/null 2>&1
+    fi
+  done
+) </dev/null >/dev/null 2>&1 &
 exit 0

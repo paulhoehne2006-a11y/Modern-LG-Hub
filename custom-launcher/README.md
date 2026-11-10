@@ -7,7 +7,8 @@ TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@192.168.178
 | Pfad | Was |
 |---|---|
 | `com.custom.launcher/` | **Die App** (Quelltext). `index.html`, `style.css`, `app.js` = Oberfläche; `launcherd.py` = Root-Hilfsdienst; `appinfo.json`, `icon.png`; `data/` nur Vorschau-Daten für den PC |
-| `com.custom.launcher_2.1.0_all.ipk` | Fertiges Installationspaket (aktuell, 2.1.0). Ältere `..._2.0.0_`/`..._1.0.0_` sind alte Stände |
+| `com.custom.launcher_<version>_all.ipk` | Installationspaket, wird von `build-ipk.sh` erzeugt (nicht im Git). Aktuelle Version steht in `com.custom.launcher/appinfo.json` (3.2.9) |
+| `../gemini-tv-controller/` | Backend auf dem TV (`server.py`, Port 8080, nur `127.0.0.1`): Gemini-Assistent, SmartThings-Kacheln, Wetter, OLED-aus |
 | `audit/review.md`, `audit/qa.md` | Code-Review und TV-Test der Agents (Fehlerlisten, alle wichtigen behoben) |
 | `boot/99-custom-launcher` | Boot-Hook, wird auf dem TV nach `/var/lib/webosbrew/init.d/` kopiert |
 | `build-ipk.sh` | Baut das .ipk aus `com.custom.launcher/` |
@@ -33,6 +34,10 @@ Auf dem TV liegt:
 4. **Bloat ausgeblendet** (nichts deinstalliert): LG Channels, Gallery+, Sport, Startseiten-Hub, Kamera, Multi View, Alexa, Travel+, Gaming Portal, Public Value, ungenutzte HDMI-Eingänge, Platzhalter-Apps. Alles unter „Mehr → Ausgeblendete Apps“ wiederherstellbar.
 5. **Telnet geschlossen**: Die offene Root-Shell ohne Passwort (Port 23) ist abgeschaltet (`/var/luna/preferences/webosbrew_telnet_disabled`). SSH (nur Schlüssel) bleibt.
 6. **Audit** (Datenschutz, Bloat, Boot): Tracker-Domains (407) und die Werbe-/ACR-/Sprach-Dienste sind durch „Life's Good Without Spying“ bereits geblockt; Ergebnis siehe `audit/privacy.md`.
+7. **Launcher v3** (3.2.x, „Modern Minimalist“): neues Design, Smart-Home-Kacheln (SmartThings über das Backend), Wetter, Gemini-Assistent, Denon-Audio-Modus (schaltet das OLED-Panel aus, Ton läuft weiter).
+   - **Home-Taste**: webOS verarbeitet sie selbst (`homeAutoLaunch` bleibt an, sonst reagiert die Fernbedienung nicht). `launcherd.py` leitet LG-Home sofort auf den Launcher um; der Launcher bekommt dann `webOSRelaunch` und springt nach oben. Zurück aus einer App behält die Position.
+   - **Achtung**: Niemals `defaultApps.home` (Kategorie `general`) auf `com.custom.launcher` setzen. Dann startet webOS bei Home gar nichts mehr (Home-Taste tot, auch nach Neustart). Richtiger Wert: `{"MembershipApp":"com.webos.app.overlaymembership"}` ohne `home`.
+   - **Absicherung**: Der Boot-Hook startet `launcherd.py` neu, falls der Dienst abstürzt (Prüfung jede Minute), und schreibt ins Log, wenn `python3` fehlt. Pausieren deshalb über die `.off`-Datei, nicht über `launcherd.py stop`.
 
 ## Bedienung / Notausstieg
 

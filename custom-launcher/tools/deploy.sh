@@ -24,7 +24,9 @@ $SSH "$TV" 'python3 -c "import ast; ast.parse(open(\"/tmp/launcherd.check.py\").
   || { echo "ABORT: syntax check failed on the TV, nothing was changed"; exit 1; }
 
 # 2. stop the old helper (by PID, never by pattern match against our own shell)
+#    (the deploying flag keeps the boot hook's supervisor from restarting the old helper meanwhile)
 $SSH "$TV" '
+  touch /tmp/custom-launcher.deploying
   [ -f '"$APP"'/launcherd.py ] && python3 '"$APP"'/launcherd.py stop >/dev/null 2>&1
   for p in /proc/[0-9]*; do
     c=$(tr "\0" " " < $p/cmdline 2>/dev/null)
@@ -36,7 +38,7 @@ OUT=$(tools/tv.sh 'timeout 60 luna-send -i luna://com.webos.appInstallService/de
 echo "$OUT" | grep -v Terminated || true
 if ! echo "$OUT" | grep -q INSTALLED; then
   echo "ABORT: install did not report success. Trying to restart the previous helper."
-  $SSH "$TV" '[ -f '"$APP"'/launcherd.py ] && python3 '"$APP"'/launcherd.py start; true'
+  $SSH "$TV" 'rm -f /tmp/custom-launcher.deploying; [ -f '"$APP"'/launcherd.py ] && python3 '"$APP"'/launcherd.py start; true'
   exit 1
 fi
 
@@ -53,6 +55,7 @@ $SSH "$TV" '
   mv /tmp/99-custom-launcher.new '"$HOOK"'
   rm -f /tmp/custom-launcher.ipk
   python3 '"$APP"'/launcherd.py start
+  rm -f /tmp/custom-launcher.deploying
   sleep 1
   python3 '"$APP"'/launcherd.py status'
 

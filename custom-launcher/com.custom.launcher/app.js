@@ -120,6 +120,10 @@
   let items = new Map();      // id -> item
   let smarthomeIds = [], dockIds = [], gridIds = [];
 
+  function deviceEmoji(type) {
+    return type === 'plug' ? '🔌' : type === 'tv' ? '📺' : '💡';
+  }
+
   function getSmartDeviceList() {
     return (state.smartDevices && state.smartDevices.length) ? state.smartDevices : [
       { id: '574d6169-7fe8-4c4e-abd6-9a9b7415d843', name: 'TV-Licht', type: 'light', state: 'off' },
@@ -151,7 +155,7 @@
       if (!s) continue;
       const sId = 'sh:' + s.id;
       const isOn = s.state === 'on';
-      const icon = s.type === 'plug' ? '🔌' : '💡';
+      const icon = deviceEmoji(s.type);
       map.set(sId, {
         id: sId,
         deviceId: s.id,
@@ -636,13 +640,19 @@
       if (it.isAudioMode) {
         toast('Denon AVR Audio-Modus: Schalte OLED-Panel aus...');
         setTimeout(() => {
+          // Backend first; fall back to a direct luna call if it is down, slow or reports failure.
+          const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+          const abortTimer = ctrl ? setTimeout(() => ctrl.abort(), 4000) : 0;
           fetch('http://127.0.0.1:8080/api/quick', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'screen_off' })
-          }).then(res => {
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-          }).catch(err => {
+            body: JSON.stringify({ action: 'screen_off' }),
+            signal: ctrl ? ctrl.signal : undefined
+          }).then(res => res.json().then(data => {
+            if (!res.ok || !data || data.success !== true) throw new Error('screen_off failed: HTTP ' + res.status);
+            clearTimeout(abortTimer);
+          })).catch(() => {
+            clearTimeout(abortTimer);
             if (IS_TV) {
               luna('luna://com.webos.service.tvpower/power/turnOffScreen', {}).catch(() => {
                 toast('Fehler beim Ausschalten des Bildschirms');
@@ -804,7 +814,7 @@
     const entries = all.map(dev => {
       const isCurrent = dev.id === currentSlotDevId;
       const isShown = activeIds.includes(dev.id);
-      const icon = dev.type === 'plug' ? '🔌' : '💡';
+      const icon = deviceEmoji(dev.type);
       const statusText = dev.state === 'on' ? 'AN' : 'AUS';
       const hint = isCurrent ? 'Aktuell hier' : (isShown ? 'Bereits aktiv' : statusText);
       return {
@@ -849,7 +859,7 @@
     const entries = all.map(dev => {
       const idx = activeIds.indexOf(dev.id);
       const isAssigned = idx >= 0;
-      const icon = dev.type === 'plug' ? '🔌' : '💡';
+      const icon = deviceEmoji(dev.type);
       return {
         label: (isAssigned ? '✓ ' : '  ') + icon + ' ' + dev.name,
         hint: isAssigned ? ('Kachel ' + (idx + 1)) : (dev.state === 'on' ? 'AN' : 'AUS'),
@@ -986,7 +996,7 @@
   /* ------------------------------------------------------------------ */
   /* Keys and pointer                                                    */
   /* ------------------------------------------------------------------ */
-  const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27, HOME: 36 };
+  const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
   const DIRS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
   let okDown = false, okLong = false, okTimer = 0;
   let okBlocked = false;         // OK is still held from an action that just finished: ignore until released
@@ -1023,7 +1033,7 @@
       }
       return;
     }
-    if (!(k in DIRS) && k !== KEY.OK && k !== KEY.BACK && k !== KEY.ESC && k !== KEY.HOME) return;
+    if (!(k in DIRS) && k !== KEY.OK && k !== KEY.BACK && k !== KEY.ESC) return;
     e.preventDefault();
     wake();
     if (mode === 'menu') {
@@ -1047,21 +1057,12 @@
       okTimer = setTimeout(() => { if (okDown && mode === 'home') { okLong = true; openCardMenu(focusId); } }, HOLD_MS);
       return;
     }
-    if (k === KEY.HOME) {
-      e.preventDefault();
-      if (geminiModalOpen) closeGeminiModal();
-      if (mode === 'menu') closeMenu();
-      if (mode === 'move') endMove();
-      const first = dockIds[0] || smarthomeIds[0] || gridIds[0];
-      if (first) setFocus(first, { instant: false });
-      if (pageEl) pageEl.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
     // Back: jump to the top; at the top there is nowhere further back (this is the home screen)
+    // (The remote's Home button never reaches the page: webOS handles it and launcherd.py
+    // redirects LG home back to this app, which arrives here as webOSRelaunch.)
     const first = dockIds[0] || smarthomeIds[0] || gridIds[0];
     if (focusId !== first) {
       setFocus(first);
-      if (pageEl) pageEl.scrollTo({ top: 0, behavior: 'smooth' });
     }
   });
 
@@ -1189,46 +1190,48 @@
     } catch (_) {}
   }
 
-  function captureHomeKey() {
-    // Ensure webOS does not swallow the Home key via access policy,
-    // allowing extinput-service to trigger the standard Home lifecycle
-    // which launcherd.py intercepts and redirects seamlessly.
-    try {
-      if (window.PalmSystem && window.PalmSystem.setWindowProperty) {
-        window.PalmSystem.setWindowProperty('_WEBOS_ACCESS_POLICY_KEYS_HOME', 'false');
-      }
-    } catch (e) { /* older firmware */ }
-  }
+  // Home key: webOS handles it itself (default access policy) and launcherd.py redirects
+  // LG home back to this app, which then gets a webOSRelaunch event (see onRelaunch).
 
   function resetKeys() {            // a key-up can get lost while the app is hidden or loses focus
     okDown = false; okLong = false; okBlocked = false; menuArmed = true;
     clearTimeout(okTimer);
   }
 
+  // visibilitychange, focus and webOSRelaunch often fire together for one return to the app:
+  // run the (network-heavy) refresh only once per burst.
+  let lastShown = 0;
   function onShown() {
+    const now = Date.now();
+    if (now - lastShown < 1000) return;
+    lastShown = now;
     activateApp();
     resetKeys();
     restoreView();
     wake();
     tick();
-    captureHomeKey();
     refreshData(false);
-    if (typeof closeMenu === 'function' && mode === 'menu') closeMenu();
-    if (typeof closeGeminiModal === 'function' && geminiModalOpen) closeGeminiModal();
-    if (typeof endMove === 'function' && mode === 'move') endMove();
+  }
+
+  // A relaunch means "Home was pressed" (launcherd redirects LG home here): start fresh at the top.
+  // A plain return from an app (Back) keeps the focused card.
+  let lastRelaunch = 0;
+  function onRelaunch() {
+    const now = Date.now();
+    if (now - lastRelaunch < 300) return;   // fired on both document and window
+    lastRelaunch = now;
+    onShown();
+    if (mode === 'menu') closeMenu();
+    if (geminiModalOpen) closeGeminiModal();
+    if (mode === 'move') endMove();
     const first = dockIds[0] || smarthomeIds[0] || gridIds[0];
-    if (first) {
-      setFocus(first, { instant: false });
-    }
-    if (pageEl) {
-      pageEl.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    if (first) setFocus(first);
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) resetKeys(); else onShown(); });
   window.addEventListener('blur', resetKeys);
   window.addEventListener('focus', onShown);
-  document.addEventListener('webOSRelaunch', onShown);
-  window.addEventListener('webOSRelaunch', onShown);
+  document.addEventListener('webOSRelaunch', onRelaunch);
+  window.addEventListener('webOSRelaunch', onRelaunch);
 
   if (!IS_TV) {
     // PC preview only: the TV has these fonts built in
@@ -1534,7 +1537,6 @@
     document.body.classList.add('booting');
     activateApp();
     tick();
-    captureHomeKey();
     fetchWeather();
     fetchSmartThingsDevices();
     initSoundOutput();

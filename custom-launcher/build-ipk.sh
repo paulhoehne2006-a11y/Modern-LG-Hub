@@ -11,7 +11,7 @@ B=$(mktemp -d)
 mkdir -p "$B/data/usr/palm/applications/$APP" "$B/control"
 cp -r "$APP"/. "$B/data/usr/palm/applications/$APP/"
 # generated on the TV by launcherd.py / v1 leftovers: never ship them
-rm -rf "$B/data/usr/palm/applications/$APP/data" "$B/data/usr/palm/applications/$APP/apps.json" "$B/data/usr/palm/applications/$APP/refresh-apps.py" "$B/data/usr/palm/applications/$APP/home-watch.py"
+rm -rf "$B/data/usr/palm/applications/$APP/data" "$B/data/usr/palm/applications/$APP/apps.json" "$B/data/usr/palm/applications/$APP/refresh-apps.py" "$B/data/usr/palm/applications/$APP/home-watch.py" "$B/data/usr/palm/applications/$APP/__pycache__"
 cat > "$B/control/control" <<EOF
 Package: $APP
 Version: $VER

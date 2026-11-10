@@ -11,18 +11,24 @@ import time
 from typing import Dict, Any, Optional
 
 TV_HOST = os.environ.get("TV_HOST", "root@192.168.178.60")
+if TV_HOST.startswith("-"):  # would be parsed as an ssh option
+    raise ValueError("TV_HOST must not start with '-'")
 IS_LOCAL = os.path.exists("/usr/sbin/luna-send") or os.path.exists("/usr/bin/luna-send")
 
-# SSH Multiplexing configuration
-# Reduced persist time to prevent stale sockets if TV reboots
+# accept-new: trust the TV's key on first connect, but refuse if it later changes (MITM).
 SSH_OPTS = [
-    "-o", "ControlMaster=auto",
-    "-o", "ControlPath=/tmp/ssh_mux_%h_%p",
-    "-o", "ControlPersist=60",
-    "-o", "StrictHostKeyChecking=no",
+    "-o", "StrictHostKeyChecking=accept-new",
     "-o", "BatchMode=yes",
     "-o", "ConnectTimeout=2" # Faster timeout for failing connections
 ]
+# SSH multiplexing needs Unix sockets, which Windows OpenSSH does not support.
+# Reduced persist time to prevent stale sockets if TV reboots
+if os.name != "nt":
+    SSH_OPTS = [
+        "-o", "ControlMaster=auto",
+        "-o", "ControlPath=/tmp/ssh_mux_%h_%p",
+        "-o", "ControlPersist=60",
+    ] + SSH_OPTS
 
 APP_MAP = {
     "netflix": "netflix",
