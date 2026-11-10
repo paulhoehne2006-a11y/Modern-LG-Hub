@@ -10,7 +10,7 @@ import base64
 import time
 from typing import Dict, Any, Optional
 
-TV_HOST = "root@192.168.178.60"
+TV_HOST = os.environ.get("TV_HOST", "root@192.168.178.60")
 IS_LOCAL = os.path.exists("/usr/sbin/luna-send") or os.path.exists("/usr/bin/luna-send")
 
 # SSH Multiplexing configuration

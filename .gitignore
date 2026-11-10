@@ -3,10 +3,27 @@ __pycache__/
 
 dist/
 
+# Security & Secrets
 *.key
+*.pem
+*.p12
+*.pfx
 .env
 *.env
 *.env.*
 *api_key*
 *token*
 *.ipk
+*.log
+*.bak
+
+# IDE and tool configs
+.claude/
+.vscode/
+.idea/
+
+# Local diagnostic screenshots
+*live-screen*
+modern-tv-*.png
+tv-screen-after-cleanup.png
+optimized-tv-screen.png

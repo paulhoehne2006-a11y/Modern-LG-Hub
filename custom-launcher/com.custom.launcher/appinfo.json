@@ -1,6 +1,6 @@
 {
   "id": "com.custom.launcher",
-  "version": "3.2.8",
+  "version": "3.2.9",
   "vendor": "Custom",
   "type": "web",
   "main": "index.html",

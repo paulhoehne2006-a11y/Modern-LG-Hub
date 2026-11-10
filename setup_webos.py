@@ -1,7 +1,8 @@
+import os
 import subprocess
 import sys
 
-TV_IP = "192.168.178.60"
+TV_IP = os.environ.get("TV_IP", "192.168.178.60")
 SSH_PORT = "22"  # Standard-Port des webosbrew SSH-Servers; falls inaktiv, auf 22 ändern
 SSH_USER = "root"
 

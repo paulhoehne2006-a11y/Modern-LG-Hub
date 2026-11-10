@@ -1,180 +1,111 @@
-# SlopBro
+# Modern LG Hub 📺✨
 
-## Status
+> **Modern, minimalist, high-performance custom launcher and smart control hub for rooted LG webOS Smart TVs.**
 
-> [!IMPORTANT]
-> SlopBro is not expected to work on webOS 10 and 11 firmware released since
-> about 2026-10-10.
+Designed for pure speed, zero bloat, elegant dark aesthetics, and seamless hardware integration.
 
-LG finally actually fixed the jsserver vulnerability in webOS 10 and 11
-around 10 October 2026.
+---
 
-SlopBro has been used successfully against webOS 4–11 and includes
-a workaround for LG's initial attempt to patch the jsserver vulnerability.
-(While it might work all the way back to webOS 3.4.2, I recommend using
-[dejavuln-autoroot](https://github.com/throwaway96/dejavuln-autoroot) for
-webOS 3.5 and 4.x.)
+## 🌟 Key Features
 
-> [!IMPORTANT]
-> Please do not open an issue just to report whether or not SlopBro works on
-> a specific firmware version.
+- **⚡ Blazing Fast Performance (Rock-Solid 60 FPS)**
+  - Replaces sluggish stock webOS menus with an ultra-lightweight, zero-bloat interface.
+  - Native CSS hardware acceleration with composite-only transforms and opacity (no laggy filters, zero frame drops).
+  - Instant micro-interactions and smooth focus transitions.
 
-If you're not sure whether your firmware is vulnerable, just try it. A failed
-attempt is not going to harm your TV.
+- **🏠 Persistent Home Button Interception**
+  - Pressing the physical **Home** button on your LG Magic Remote reliably brings you to **Modern LG Hub**—never the slow, ad-filled stock webOS home.
+  - Event-driven background helper daemon (`launcherd.py`) catches OS lifecycle events in real time without CPU polling.
 
-## Overview
+- **🌙 OLED Screen-Off Mode ("Display Aus")**
+  - Shuts off the OLED panel instantly to save power and protect against burn-in.
+  - Keeps apps and digital audio (e.g., optical Toslink to Denon AVR / Soundbars) running continuously in the background.
+  - Wake up anytime with a simple press of any button on the remote.
 
-SlopBro is a proof-of-concept exploit for the jsserver vulnerability in
-LG TVs.
+- **💡 Smart Home Dashboard & Management**
+  - Integrated smart device tiles with live status indicators (lights, smart plugs).
+  - Interactive **Smart Home Manager**: reorder, swap, or toggle visible smart home devices directly from your remote.
+  - Direct integration with local controller APIs and SmartThings.
 
-Some of the Python was written by an LLM. (You think I wanted to write a
-Python 2.7/3.x-compatible WebSocket client?) The rest is good, old-fashioned
-**human** slop. It's the spirit of the times, you know?
+- **🤖 Local Gemini AI TV Assistant**
+  - Built-in Gemini voice/text assistant modal for smart TV commands, media searches, and automations.
+  - Lightweight Python backend server running locally on the TV.
 
-### How it works
+- **🛡️ Hardened & Privacy-First**
+  - Adware, analytics, and telemetry domains sinkholed.
+  - Insecure telnet daemon disabled by default; secure SSH key authentication only.
 
-`slopbro.py` is the main script. It performs the following steps:
+---
 
-1. Starts an HTTP server to serve the exploit page and payloads.
-2. Opens an SSAP connection to the TV.
-3. Launches a WAM app pointing at the exploit page `index.html`.
+## 🏗️ Architecture
 
-Pages running in the context of certain WAM apps can make privileged
-Luna requests. When loaded on the TV, `index.html` does the following:
-
-1. Displays status and debug info on the TV screen.
-2. Downloads files for a fake `com.webos.service.jsserver` package from the
-   HTTP server.
-3. Runs the package using the jsserver vulnerability.
-
-The entry point of the fake `com.webos.service.jsserver` package is `main.js`,
-which is executed with root privileges. It is responsible for launching
-`autoroot.sh`, which installs Homebrew Channel and enables persistence.
-
-## Running
-
-Run the script with Python 3.8 or newer, passing the IP address of your TV:
-
-```bash
-python slopbro.py [--debug] [--curl-insecure] [--fake-service-path <PATH>|--no-fake-service-path] [--local-ip <LOCAL IP>] [--webos-version <VERSION>] [--asset-source <auto|dir|embedded>] [--test-server <simple|payload>] [<TV IP ADDRESS>]
+```
+modern-lg-hub/
+├── custom-launcher/
+│   ├── com.custom.launcher/     # Main webOS HTML5/CSS3 application
+│   │   ├── app.js               # Performance-optimized UI logic & navigation
+│   │   ├── style.css            # Obsidian-dark, micro-typography styling
+│   │   ├── index.html           # Minimal DOM layout
+│   │   └── launcherd.py         # Root event daemon for Home interception & app sync
+│   ├── boot/                    # Boot-time init.d autostart scripts
+│   ├── tools/                   # Deployment, CDP debugging & automation tools
+│   └── audit/                   # Security, boot chain, and bloat audit reports
+└── gemini-tv-controller/        # Local Python REST backend & AI assistant
+    ├── server.py                # Fast REST API (port 8080) for TV & Smart Home actions
+    ├── tv.py                    # Local Luna bus TV controller (power, apps, screen off)
+    └── smartthings.py           # Smart Home device integration
 ```
 
-Use `python3 slopbro.py --help` for the full option reference.
+---
 
-Accept the pairing prompt on the target TV. (The credentials will be saved in
-a `.key` file for future use.)
+## 🚀 Quick Start & Deployment
 
-### Options
+### Prerequisites
+- Rooted LG webOS TV (webOS 4+ through webOS 24 / webOS 10.x, e.g. via Homebrew Channel).
+- SSH access enabled (`root@<TV_IP>`).
 
-The `--debug` option enables extra output on the TV screen as well as in
-`autoroot.log`.
-
-The `--curl-insecure` option passes `-k` to `curl` when downloading Homebrew
-Channel, disabling TLS certificate verification. Use it only when necessary
-(e.g., when your TV does not have the correct date due to SDP being blocked).
-
-The `--fake-service-path` option specifies the fake service path used to
-bypass the service launch patch. It defaults to
-`/usr/palm/services/com.palm.service.devmode`. Use `--no-fake-service-path` to
-disable the bypass and omit the `fake-service-path` query parameter.
-
-The `--local-ip` option allows you to specify the local IP address manually,
-which can be useful if the script guesses the wrong IP address.
-
-The `--webos-version` option specifies the TV's webOS version and limits the
-target apps to those configured for that major version. Dotted versions such
-as `6.5` are accepted and treated as major version `6`.
-
-*The version is not currently auto-detected, so you may need to specify it if
-the selected app fails.*
-
-The `--asset-source` option allows you to specify where the script should look
-for assets (`auto`, `dir`, `embedded`).
-
-The `--test-server` option starts the local HTTP server and prints its URL
-instead of connecting to the TV over SSAP, so you can test connectivity
-manually by opening the URL in a browser. It doesn't pair with or launch
-anything on the TV. The `<TV IP ADDRESS>` argument is optional but
-recommended in both modes below; if omitted, the script guesses a
-LAN-facing local IP, which may be wrong. Two modes are available:
-
-- `simple`: serves a fixed plain-text response to confirm basic HTTP
-  reachability only.
-- `payload`: serves the real exploit/payload files (same as a normal run)
-  without doing any SSAP pairing or launching, so you can load `index.html`
-  directly in a browser to examine the payload itself.
-
-## Packaging
-
-In addition to serving files from the `wwwroot` directory, SlopBro can be
-distributed as a single file with embedded assets.
-
-### Building a single-file package
-
-The packaging tool requires Python 3.12 or newer (independently of the
-launcher's runtime requirements). Generate a standalone file with:
+### Deploy to TV
+Deploy the launcher and restart the daemon in a single command:
 
 ```bash
-python3 tools/package_single_file.py --out dist/slopbro_packed.py
+cd custom-launcher
+TV_HOST="root@<TV_IP>" ./tools/deploy.sh
 ```
 
-Then run it directly (no `wwwroot` required):
+This will:
+1. Validate syntax locally.
+2. Build the `.ipk` package.
+3. Install via `appInstallService`.
+4. Install the `/var/lib/webosbrew/init.d/99-custom-launcher` boot hook.
+5. Launch Modern LG Hub and restart the background daemon.
 
+---
+
+## 🎮 Navigation & Controls (LG Magic Remote)
+
+| Button | Action |
+|---|---|
+| **D-Pad / Arrows** | Navigate cards and menus |
+| **OK / Click** | Launch application or toggle smart device |
+| **OK (Long Press)** | Open context menu (Pin, Move, Hide, Manage Smart Home) |
+| **Home Button** | Return to Modern LG Hub top screen from anywhere |
+| **Back / Exit** | Dismiss menus/modals or jump to top |
+| **Magic Pointer** | Direct cursor pointing with gyro tilt effects |
+
+---
+
+## ⚙️ Emergency Stock Fallback
+
+If you ever want to temporarily return to the stock LG webOS home screen:
 ```bash
-python3 dist/slopbro_packed.py 192.168.1.50
+ssh root@<TV_IP> "touch /var/lib/webosbrew/custom-launcher.off"
 ```
-
-You can also explicitly specify where it should look for assets
-(`embedded`, `dir`):
-
+To re-enable Modern LG Hub:
 ```bash
-python3 dist/slopbro_packed.py --asset-source embedded 192.168.1.50
+ssh root@<TV_IP> "rm /var/lib/webosbrew/custom-launcher.off"
 ```
 
-By default (`auto` mode), embedded assets are preferred over files if both
-are present.
+---
 
-## Tests
-
-Run the CLI and HTTP handler regression tests without connecting to a TV:
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-## Troubleshooting
-
-- `slopbro.py` guesses what the local IP address is and might get it wrong.
-  If you don't see any connections back to the HTTP server, try manually
-  specifying the IP address with `--local-ip`.
-
-- Make sure there are no weird network issues between your TV and wherever
-  you're running SlopBro. Remember that connections need to work in both
-  directions.
-
-- Use `--test-server simple` to check basic HTTP connectivity from the TV's
-  browser without needing SSAP pairing to work first.
-
-## Credits
-
-IDK, Claude Sonnet 4.6?
-
-(`dangbei-overlay` from [dangbro](https://github.com/azoffshowy/dangbro);
-jsserver vulnerability first publicly disclosed in
-[jsbro-autoroot](https://github.com/raws0kil/jsbro-autoroot).)
-
-## License
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU Affero General Public License as published by the Free
-Software Foundation, either version 3 of the License, or (at your option) any
-later version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License along
-with this program. If not, see <https://www.gnu.org/licenses/>.
-
-See `COPYING` for details.
+## 📄 License
+GPLv3 / Open Source. See [COPYING](COPYING).

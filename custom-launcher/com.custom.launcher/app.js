@@ -636,12 +636,20 @@
       if (it.isAudioMode) {
         toast('Denon AVR Audio-Modus: Schalte OLED-Panel aus...');
         setTimeout(() => {
-          if (IS_TV) {
-            luna('luna://com.webos.service.tvpower/power/turnOffScreen', {}).catch(err => {
-              toast('Fehler beim Ausschalten des Bildschirms');
-            });
-          }
-        }, 700);
+          fetch('http://127.0.0.1:8080/api/quick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'screen_off' })
+          }).then(res => {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+          }).catch(err => {
+            if (IS_TV) {
+              luna('luna://com.webos.service.tvpower/power/turnOffScreen', {}).catch(() => {
+                toast('Fehler beim Ausschalten des Bildschirms');
+              });
+            }
+          });
+        }, 500);
       } else {
         toggleSmartDevice(it.deviceId, it);
       }
@@ -1039,9 +1047,22 @@
       okTimer = setTimeout(() => { if (okDown && mode === 'home') { okLong = true; openCardMenu(focusId); } }, HOLD_MS);
       return;
     }
-    // Back / Home: jump to the top; at the top there is nowhere further back (this is the home screen)
+    if (k === KEY.HOME) {
+      e.preventDefault();
+      if (geminiModalOpen) closeGeminiModal();
+      if (mode === 'menu') closeMenu();
+      if (mode === 'move') endMove();
+      const first = dockIds[0] || smarthomeIds[0] || gridIds[0];
+      if (first) setFocus(first, { instant: false });
+      if (pageEl) pageEl.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    // Back: jump to the top; at the top there is nowhere further back (this is the home screen)
     const first = dockIds[0] || smarthomeIds[0] || gridIds[0];
-    if (focusId !== first) setFocus(first);
+    if (focusId !== first) {
+      setFocus(first);
+      if (pageEl) pageEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   });
 
   document.addEventListener('keyup', e => {
@@ -1169,12 +1190,14 @@
   }
 
   function captureHomeKey() {
-    // While this launcher is in front, the Home button must not open LG's home screen.
+    // Ensure webOS does not swallow the Home key via access policy,
+    // allowing extinput-service to trigger the standard Home lifecycle
+    // which launcherd.py intercepts and redirects seamlessly.
     try {
       if (window.PalmSystem && window.PalmSystem.setWindowProperty) {
-        window.PalmSystem.setWindowProperty('_WEBOS_ACCESS_POLICY_KEYS_HOME', 'true');
+        window.PalmSystem.setWindowProperty('_WEBOS_ACCESS_POLICY_KEYS_HOME', 'false');
       }
-    } catch (e) { /* older firmware: the root helper redirects instead */ }
+    } catch (e) { /* older firmware */ }
   }
 
   function resetKeys() {            // a key-up can get lost while the app is hidden or loses focus
@@ -1190,6 +1213,16 @@
     tick();
     captureHomeKey();
     refreshData(false);
+    if (typeof closeMenu === 'function' && mode === 'menu') closeMenu();
+    if (typeof closeGeminiModal === 'function' && geminiModalOpen) closeGeminiModal();
+    if (typeof endMove === 'function' && mode === 'move') endMove();
+    const first = dockIds[0] || smarthomeIds[0] || gridIds[0];
+    if (first) {
+      setFocus(first, { instant: false });
+    }
+    if (pageEl) {
+      pageEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) resetKeys(); else onShown(); });
   window.addEventListener('blur', resetKeys);
