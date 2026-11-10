@@ -1,0 +1,17 @@
+{
+  "id": "com.custom.launcher",
+  "version": "3.2.8",
+  "vendor": "Custom",
+  "type": "web",
+  "main": "index.html",
+  "title": "Home",
+  "icon": "icon.png",
+  "largeIcon": "icon.png",
+  "bgColor": "#000000",
+  "iconColor": "#000000",
+  "resolution": "1920x1080",
+  "transparent": false,
+  "handlesRelaunch": true,
+  "disableBackHistoryAPI": true,
+  "requiredPermissions": ["APPLICATION_MANAGER_READ", "APPLICATION_MANAGER_WRITE"]
+}

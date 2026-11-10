@@ -4,3 +4,9 @@ __pycache__/
 dist/
 
 *.key
+.env
+*.env
+*.env.*
+*api_key*
+*token*
+*.ipk

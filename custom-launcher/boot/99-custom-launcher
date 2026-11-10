@@ -1,0 +1,11 @@
+#!/bin/sh
+# Custom home screen (com.custom.launcher): starts its root helper at boot.
+#
+#   Pause   touch /var/lib/webosbrew/custom-launcher.off   LG's home behaves as stock again (immediately)
+#   Resume  rm /var/lib/webosbrew/custom-launcher.off
+#   Remove  delete this file, then uninstall "Home" in Homebrew Channel
+APP=/media/developer/apps/usr/palm/applications/com.custom.launcher
+[ -f "$APP/launcherd.py" ] || exit 0
+# "start" detaches at once (own session, no inherited descriptors): boot hooks never wait on it.
+python3 "$APP/launcherd.py" start --boot </dev/null >/dev/null 2>&1
+exit 0

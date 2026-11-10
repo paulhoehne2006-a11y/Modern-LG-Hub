@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>Home Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- soft light in the colour of the focused app; everything else stays true black -->
+  <div id="ambient" aria-hidden="true"><div class="amb"></div><div class="amb"></div></div>
+
+  <div id="shift"><!-- moved by a few pixels periodically (OLED care) -->
+    <div id="page">
+      <header id="hero">
+        <div id="hero-left">
+          <div id="clock"><span id="hh">--</span><span id="colon">:</span><span id="mm">--</span></div>
+          <div id="date">--</div>
+        </div>
+
+        <div id="hero-center">
+          <div id="weather" class="glass-pill" role="button" tabindex="0" aria-label="WetterOnline öffnen">
+            <span id="w-icon">⛅</span>
+            <div id="w-details">
+              <div id="w-main"><span id="w-temp">--°C</span> <span id="w-city">Musterstadt</span></div>
+              <div id="w-sub">Lade Wetter...</div>
+            </div>
+          </div>
+
+          <div id="gemini-badge" class="glass-pill gemini-pill" role="button" tabindex="0" aria-label="Gemini KI-Assistent öffnen">
+            <span class="gemini-icon">✨</span>
+            <div class="gemini-details">
+              <div class="gemini-title">Gemini KI</div>
+              <div class="gemini-sub">Fragen & Steuern</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="hero-right">
+          <div id="audio-badge" class="glass-pill audio-pill denon-avr" role="button" tabindex="0" aria-label="Audioausgabe Einstellungen">
+            <div class="audio-icon" id="audio-icon">🔊</div>
+            <div class="audio-details">
+              <div class="audio-title" id="audio-title">Denon AVR-1803</div>
+              <div class="audio-sub" id="audio-sub">Optischer Digitalausgang</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Section: Smart Home & Denon Audio Mode -->
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-title">Smart Home & Audio</span>
+          <span class="section-sub">SmartThings & Denon AVR</span>
+        </div>
+        <span class="section-hint">OK lang drücken zum Anpassen</span>
+      </div>
+      <section id="smarthome" class="cards" aria-label="Smart Home"></section>
+
+      <!-- Section: Top Apps & Inputs -->
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-title">Favoriten & Eingänge</span>
+          <span class="section-sub">Nach Nutzung sortiert</span>
+        </div>
+      </div>
+      <section id="dock" class="cards" aria-label="Favoriten"></section>
+
+      <!-- Section: All Apps -->
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-title">Alle Apps</span>
+        </div>
+      </div>
+      <section id="grid" class="cards" aria-label="Apps"></section>
+    </div>
+  </div>
+
+  <div id="scrim" aria-hidden="true"></div>
+  <div id="menu" role="dialog" aria-modal="true" hidden>
+    <div id="menu-head"><div id="menu-icon"></div><div id="menu-title"></div></div>
+    <div id="menu-clip"><div id="menu-list" role="menu"></div></div>
+    <div id="menu-hint"></div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="dim" aria-hidden="true"></div>
+
+  <!-- Gemini TV AI Assistant Overlay (100% Remote-Driven, No Keyboard Needed) -->
+  <div id="gemini-modal" class="gemini-modal" style="display: none;" role="dialog" aria-modal="true" aria-label="Gemini KI-Assistent">
+    <div class="gemini-backdrop" id="gemini-backdrop"></div>
+    <div class="gemini-container">
+      <div class="gemini-hdr">
+        <div class="gemini-brand">
+          <span class="gemini-logo-icon">✨</span>
+          <div class="gemini-brand-text">
+            <span class="gemini-title-main">Gemini KI-Assistent</span>
+            <span class="gemini-status-tag">Google AI · LG OLED G4 · 1-Klick-Steuerung</span>
+          </div>
+        </div>
+        <button id="gemini-close-btn" class="gemini-btn-pill" tabindex="0">✕ Schließen (Zurück)</button>
+      </div>
+
+      <div class="gemini-body">
+        <!-- Left: Quick Topic Categories & Prompts -->
+        <div class="gemini-sidebar">
+          <div class="g-sec-title">🍿 Film- & Serientipps</div>
+          <div class="g-tile-group">
+            <button class="g-tile" data-prompt="Empfiehl mir 2-3 herausragende Sci-Fi Filme für heute Abend auf Netflix oder Prime">
+              <span class="g-tile-icon">🚀</span>
+              <span class="g-tile-label">Sci-Fi Highlights</span>
+            </button>
+            <button class="g-tile" data-prompt="Empfiehl mir 2-3 packende Psychothriller mit überraschenden Wendungen">
+              <span class="g-tile-icon">🍿</span>
+              <span class="g-tile-label">Packende Thriller</span>
+            </button>
+            <button class="g-tile" data-prompt="Welche 2 Serien lohnen sich aktuell am meisten zu bingen?">
+              <span class="g-tile-icon">📺</span>
+              <span class="g-tile-label">Serien-Tipps</span>
+            </button>
+            <button class="g-tile" data-prompt="Empfiehl mir 2 grandiose Dokumentationen über Natur, Weltall oder Geschichte">
+              <span class="g-tile-icon">🌍</span>
+              <span class="g-tile-label">Top Dokus</span>
+            </button>
+          </div>
+
+          <div class="g-sec-title">💡 Smart Home & TV-Szenen</div>
+          <div class="g-tile-group">
+            <button class="g-tile" data-prompt="Schalte das TV-Licht und Wohnzimmerlicht für einen gemütlichen Filmabend ein">
+              <span class="g-tile-icon">🎬</span>
+              <span class="g-tile-label">Kino-Beleuchtung</span>
+            </button>
+            <button class="g-tile" data-prompt="Schalte alle Lichter im Wohnzimmer und am TV aus">
+              <span class="g-tile-icon">🌙</span>
+              <span class="g-tile-label">Lichter Aus</span>
+            </button>
+            <button class="g-tile" data-prompt="Schalte auf den PC (HDMI 1) und schalte das Schreibtischlicht an">
+              <span class="g-tile-icon">🖥️</span>
+              <span class="g-tile-label">PC & Schreibtisch</span>
+            </button>
+            <button class="g-tile" data-prompt="Schalte den Bildschirm aus, damit Musik über den Denon-Verstärker weiterläuft">
+              <span class="g-tile-icon">🖤</span>
+              <span class="g-tile-label">OLED Display Aus</span>
+            </button>
+          </div>
+
+          <div class="g-sec-title">🧠 Wissen & Inspiration</div>
+          <div class="g-tile-group">
+            <button class="g-tile" data-prompt="Erzähle mir einen faszinierenden, verblüffenden wissenschaftlichen Fakt für heute">
+              <span class="g-tile-icon">🎲</span>
+              <span class="g-tile-label">Fakt des Tages</span>
+            </button>
+            <button class="g-tile" data-prompt="Schlage ein schnelles, raffiniertes Abendessen vor, das in unter 20 Minuten fertig ist">
+              <span class="g-tile-icon">🍳</span>
+              <span class="g-tile-label">Schnelles Rezept</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Response / Result Panel -->
+        <div class="gemini-content-panel">
+          <div class="gemini-panel-hdr">
+            <div id="gemini-panel-status" class="panel-status">✨ Wähle ein Thema mit der Fernbedienung</div>
+            <button id="gemini-refresh-btn" class="gemini-refresh-btn" style="display: none;">🔄 Noch ein Vorschlag</button>
+          </div>
+
+          <div id="gemini-chat" class="gemini-result-scroll">
+            <div class="gemini-welcome-card">
+              <div class="welcome-sparkle-lg">✨</div>
+              <div class="welcome-heading">Gemini KI auf deinem Fernseher</div>
+              <div class="welcome-desc">Klicke einfach auf eine der Kacheln links mit dem Zeiger oder Steuerkreuz der Magic Remote. Gemini antwortet sofort und steuert auf Wunsch deine Lichter und Eingänge.</div>
+              <div class="welcome-hint">Kein mühsames Tippen auf der TV-Tastatur nötig – 100% für die Fernbedienung optimiert.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

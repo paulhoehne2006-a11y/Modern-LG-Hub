@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Icon contact sheet</title>
+<style>
+  @font-face { font-family: "LG Smart UI"; font-weight: 300; src: url(fixtures/fonts/LG_Smart_UI-Light.ttf); }
+  @font-face { font-family: "LG Smart UI"; font-weight: 400; src: url(fixtures/fonts/LG_Smart_UI-Regular.ttf); }
+  @font-face { font-family: "LG Smart UI"; font-weight: 600; src: url(fixtures/fonts/LG_Smart_UI-SemiBold.ttf); }
+  html, body { margin: 0; background: #000; color: #aaa; font: 13px "LG Smart UI", sans-serif; }
+  #g { display: grid; grid-template-columns: repeat(9, 1fr); gap: 10px; padding: 14px; }
+  .c { background: #0c0c0c; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .sw { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #333; }
+  img { width: 96px; height: 96px; object-fit: contain; background:
+        repeating-conic-gradient(#1a1a1a 0% 25%, #111 0% 50%) 50% / 16px 16px; }
+  .t { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ddd; }
+</style>
+</head>
+<body>
+<div id="g"></div>
+<script>
+fetch('fixtures/manifest.json').then(r => r.json()).then(m => {
+  const g = document.getElementById('g');
+  for (const a of m.apps) {
+    const best = a.assets.extraLargeIcon || a.assets.largeIcon || a.assets.icon;
+    if (!best || best.missing) continue;
+    const c = document.createElement('div'); c.className = 'c';
+    c.innerHTML = '<div class="t"></div><div class="row"><img><div><div class="sw"></div><div class="sw" style="margin-top:4px"></div></div></div><div class="d"></div>';
+    c.querySelector('.t').textContent = a.title;
+    c.querySelector('img').src = 'fixtures/' + best.file;
+    const sw = c.querySelectorAll('.sw');
+    sw[0].style.background = a.iconColor || 'transparent'; sw[0].title = 'iconColor';
+    sw[1].style.background = a.bgColor || 'transparent';
+    c.querySelector('.d').textContent = best.w + 'px · ic ' + (a.iconColor || '–') + (a.type === 'stub' ? ' · STUB' : '');
+    g.appendChild(c);
+  }
+});
+</script>
+</body>
+</html>
