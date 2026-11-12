@@ -271,6 +271,24 @@ class LGTV:
             return LGTV.screen_off()
 
     @staticmethod
+    def set_picture_mode(mode: str) -> Dict[str, Any]:
+        """Sets picture mode: game, filmMaker, cinema, expert1 (ISF Dark), expert2 (ISF Bright), standard."""
+        mode_map = {
+            "game": "game",
+            "filmmaker": "filmMaker",
+            "cinema": "cinema",
+            "isf_dark": "expert1",
+            "isf_bright": "expert2",
+            "standard": "standard"
+        }
+        pic_mode = mode_map.get(mode.lower().strip(), mode)
+        res = luna_call("luna://com.webos.settingsservice/setSystemSettings", {
+            "category": "picture",
+            "settings": {"pictureMode": pic_mode}
+        })
+        return {"action": "set_picture_mode", "mode": pic_mode, "success": res.get("returnValue", False)}
+
+    @staticmethod
     def get_audio_status() -> Dict[str, Any]:
         """Returns sound output and volume details."""
         sound_out = luna_call("luna://com.webos.service.audio/getSoundOutput", {})

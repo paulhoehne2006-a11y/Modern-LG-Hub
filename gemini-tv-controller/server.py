@@ -206,6 +206,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 res = {"error": "Missing deviceId"}
             self._respond_json(res)
 
+        elif path == "/api/picture/mode":
+            mode = req_data.get("mode", "game")
+            res = LGTV.set_picture_mode(mode)
+            self._respond_json(res)
+
         elif path == "/api/quick":
             action = req_data.get("action", "")
             res = {"success": True, "action": action}
@@ -229,6 +234,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 res = LGTV.switch_input("pc")
             elif action == "home":
                 res = LGTV.launch_app("com.custom.launcher")
+            elif action.startswith("pic_"):
+                res = LGTV.set_picture_mode(action[4:])
             
             self._respond_json(res)
 
