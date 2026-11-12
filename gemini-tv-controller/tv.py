@@ -218,7 +218,9 @@ class LGTV:
     @staticmethod
     def switch_input(input_name: str) -> Dict[str, Any]:
         """Switches HDMI input (e.g. 'pc', 'hdmi1', 'hdmi2')."""
-        app_id = INPUT_MAP.get(input_name.lower().strip(), "com.webos.app.hdmi1")
+        name = input_name.lower().strip()
+        # Accept full webOS ids too (the Android remote sends "com.webos.app.hdmi2").
+        app_id = name if name.startswith("com.webos.app.hdmi") else INPUT_MAP.get(name, "com.webos.app.hdmi1")
         res = luna_call("luna://com.webos.applicationManager/launch", {"id": app_id})
         return {
             "input": input_name,
