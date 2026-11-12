@@ -35,6 +35,20 @@ def get_api_key() -> str:
 def get_model() -> str:
     return _env_value("GEMINI_MODEL") or DEFAULT_MODEL
 
+SUGGEST_TAG = "NACHFRAGEN:"
+MAX_HISTORY = 12          # turns (user + model) sent back for context
+
+def split_suggestions(text: str):
+    """Removes the 'NACHFRAGEN: a | b | c' line Gemini appends; returns (text, [suggestions])."""
+    lines = (text or "").rstrip().split("\n")
+    for i in range(len(lines) - 1, max(len(lines) - 4, -1), -1):
+        raw = lines[i].strip().strip("*_ ")
+        if raw.upper().startswith(SUGGEST_TAG):
+            items = [s.strip().strip("*_\"' ") for s in raw[len(SUGGEST_TAG):].split("|")]
+            items = [s[:60] for s in items if s][:3]
+            return "\n".join(lines[:i] + lines[i + 1:]).strip(), items
+    return (text or "").strip(), []
+
 def _to_int(val, default: int = 1, lo: int = 1, hi: int = 20) -> int:
     try:
         n = int(float(val))
@@ -260,8 +274,12 @@ class GeminiTVAgent:
     def __init__(self, api_key: str = None):
         self.api_key = api_key or get_api_key()
 
-    def process_command(self, user_prompt: str) -> Dict[str, Any]:
-        """Sends user command to Gemini with function calling, executes tools and returns response."""
+    def process_command(self, user_prompt: str, history: List[Dict[str, str]] = None) -> Dict[str, Any]:
+        """Sends user command to Gemini with function calling, executes tools and returns response.
+
+        history: earlier turns of this conversation, [{"role": "user"|"model", "text": "..."}],
+        so follow-up questions have context. Only text is kept (no tool calls).
+        """
         if not self.api_key:
             return {
                 "text": "Kein Gemini API-Key hinterlegt. Bitte trage deinen kostenlosen API-Key ein (erhältlich unter https://aistudio.google.com/).",
@@ -277,16 +295,22 @@ class GeminiTVAgent:
             "Du kannst sowohl allgemeine Fragen kompetent und prägnant beantworten (z. B. Filmempfehlungen, Allgemeinwissen, Wetter, Rezepte, Erklärungen) "
             "als auch den Fernseher und Smart-Home-Geräte direkt über die bereitgestellten Funktionen steuern. "
             "Wenn der Nutzer den Fernseher steuern will (z. B. 'schalte auf den PC', 'starte YouTube', 'mach leiser', 'schalte TV-Licht ein', 'mach das Bild aus'), rufe die entsprechenden Funktionen auf. "
-            "Formatiere deine Antworten übersichtlich und gut lesbar für einen Fernsehbildschirm (Absätze, Aufzählungspunkte, prägnant auf Deutsch)."
+            "Formatiere deine Antworten übersichtlich und gut lesbar für einen Fernsehbildschirm (Absätze, Aufzählungspunkte, prägnant auf Deutsch). "
+            "Der Nutzer kann nicht tippen, nur Vorschläge anklicken. Beende deshalb jede Text-Antwort mit genau einer letzten Zeile "
+            f"im Format '{SUGGEST_TAG} Nachfrage 1 | Nachfrage 2 | Nachfrage 3': 2 bis 3 kurze, konkrete Nachfragen "
+            "aus Sicht des Nutzers (je höchstens 40 Zeichen), die direkt an deine Antwort anknüpfen."
         )
 
+        contents = []
+        for turn in (history or [])[-MAX_HISTORY:]:
+            role = "model" if turn.get("role") == "model" else "user"
+            text = str(turn.get("text") or "")[:4000]
+            if text:
+                contents.append({"role": role, "parts": [{"text": text}]})
+        contents.append({"role": "user", "parts": [{"text": user_prompt}]})
+
         payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": user_prompt}]
-                }
-            ],
+            "contents": contents,
             "systemInstruction": {
                 "parts": [{"text": system_instruction}]
             },
@@ -355,6 +379,8 @@ class GeminiTVAgent:
             elif "text" in part:
                 model_text += part["text"]
 
+        model_text, suggestions = split_suggestions(model_text)
+
         if executed_actions and not model_text:
             summaries = []
             for a in executed_actions:
@@ -394,5 +420,6 @@ class GeminiTVAgent:
         return {
             "text": model_text.strip(),
             "actions": executed_actions,
+            "suggestions": suggestions,
             "prompt": user_prompt
         }

@@ -86,94 +86,19 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <div id="dim" aria-hidden="true"></div>
 
-  <!-- Gemini TV AI Assistant Overlay (100% Remote-Driven, No Keyboard Needed) -->
-  <div id="gemini-modal" class="gemini-modal" style="display: none;" role="dialog" aria-modal="true" aria-label="Gemini KI-Assistent">
-    <div class="gemini-backdrop" id="gemini-backdrop"></div>
-    <div class="gemini-container">
-      <div class="gemini-hdr">
-        <div class="gemini-brand">
-          <span class="gemini-logo-icon">✨</span>
-          <div class="gemini-brand-text">
-            <span class="gemini-title-main">Gemini KI-Assistent</span>
-            <span class="gemini-status-tag">Google AI · LG OLED G4 · 1-Klick-Steuerung</span>
-          </div>
+  <!-- Gemini assistant (remote only: tiles + follow-up suggestions, no typing) -->
+  <div id="gemini-modal" class="gm" style="display: none;" role="dialog" aria-modal="true" aria-label="Gemini">
+    <div class="gm-backdrop" id="gemini-backdrop"></div>
+    <div class="gm-shell">
+      <header class="gm-top">
+        <div class="gm-brand"><span class="gm-spark">✦</span><span class="gm-name">Gemini</span></div>
+        <div class="gm-top-right">
+          <span class="gm-keyhint">🎙 Mikro-Taste oder Zurück schließt</span>
+          <button id="gemini-close-btn" class="gm-close" tabindex="-1" aria-label="Schließen">✕</button>
         </div>
-        <button id="gemini-close-btn" class="gemini-btn-pill" tabindex="0">✕ Schließen (Zurück)</button>
-      </div>
-
-      <div class="gemini-body">
-        <!-- Left: Quick Topic Categories & Prompts -->
-        <div class="gemini-sidebar">
-          <div class="g-sec-title">🍿 Film- & Serientipps</div>
-          <div class="g-tile-group">
-            <button class="g-tile" data-prompt="Empfiehl mir 2-3 herausragende Sci-Fi Filme für heute Abend auf Netflix oder Prime">
-              <span class="g-tile-icon">🚀</span>
-              <span class="g-tile-label">Sci-Fi Highlights</span>
-            </button>
-            <button class="g-tile" data-prompt="Empfiehl mir 2-3 packende Psychothriller mit überraschenden Wendungen">
-              <span class="g-tile-icon">🍿</span>
-              <span class="g-tile-label">Packende Thriller</span>
-            </button>
-            <button class="g-tile" data-prompt="Welche 2 Serien lohnen sich aktuell am meisten zu bingen?">
-              <span class="g-tile-icon">📺</span>
-              <span class="g-tile-label">Serien-Tipps</span>
-            </button>
-            <button class="g-tile" data-prompt="Empfiehl mir 2 grandiose Dokumentationen über Natur, Weltall oder Geschichte">
-              <span class="g-tile-icon">🌍</span>
-              <span class="g-tile-label">Top Dokus</span>
-            </button>
-          </div>
-
-          <div class="g-sec-title">💡 Smart Home & TV-Szenen</div>
-          <div class="g-tile-group">
-            <button class="g-tile" data-prompt="Schalte das TV-Licht und Wohnzimmerlicht für einen gemütlichen Filmabend ein">
-              <span class="g-tile-icon">🎬</span>
-              <span class="g-tile-label">Kino-Beleuchtung</span>
-            </button>
-            <button class="g-tile" data-prompt="Schalte alle Lichter im Wohnzimmer und am TV aus">
-              <span class="g-tile-icon">🌙</span>
-              <span class="g-tile-label">Lichter Aus</span>
-            </button>
-            <button class="g-tile" data-prompt="Schalte auf den PC (HDMI 1) und schalte das Schreibtischlicht an">
-              <span class="g-tile-icon">🖥️</span>
-              <span class="g-tile-label">PC & Schreibtisch</span>
-            </button>
-            <button class="g-tile" data-prompt="Schalte den Bildschirm aus, damit Musik über den Denon-Verstärker weiterläuft">
-              <span class="g-tile-icon">🖤</span>
-              <span class="g-tile-label">OLED Display Aus</span>
-            </button>
-          </div>
-
-          <div class="g-sec-title">🧠 Wissen & Inspiration</div>
-          <div class="g-tile-group">
-            <button class="g-tile" data-prompt="Erzähle mir einen faszinierenden, verblüffenden wissenschaftlichen Fakt für heute">
-              <span class="g-tile-icon">🎲</span>
-              <span class="g-tile-label">Fakt des Tages</span>
-            </button>
-            <button class="g-tile" data-prompt="Schlage ein schnelles, raffiniertes Abendessen vor, das in unter 20 Minuten fertig ist">
-              <span class="g-tile-icon">🍳</span>
-              <span class="g-tile-label">Schnelles Rezept</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Right: Response / Result Panel -->
-        <div class="gemini-content-panel">
-          <div class="gemini-panel-hdr">
-            <div id="gemini-panel-status" class="panel-status">✨ Wähle ein Thema mit der Fernbedienung</div>
-            <button id="gemini-refresh-btn" class="gemini-refresh-btn" style="display: none;">🔄 Noch ein Vorschlag</button>
-          </div>
-
-          <div id="gemini-chat" class="gemini-result-scroll">
-            <div class="gemini-welcome-card">
-              <div class="welcome-sparkle-lg">✨</div>
-              <div class="welcome-heading">Gemini KI auf deinem Fernseher</div>
-              <div class="welcome-desc">Klicke einfach auf eine der Kacheln links mit dem Zeiger oder Steuerkreuz der Magic Remote. Gemini antwortet sofort und steuert auf Wunsch deine Lichter und Eingänge.</div>
-              <div class="welcome-hint">Kein mühsames Tippen auf der TV-Tastatur nötig – 100% für die Fernbedienung optimiert.</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </header>
+      <main id="gemini-chat" class="gm-chat" aria-live="polite"></main>
+      <footer id="gemini-chips" class="gm-chips"></footer>
     </div>
   </div>
 

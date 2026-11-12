@@ -143,7 +143,11 @@ class RequestHandler(BaseHTTPRequestHandler):
             prompt = req_data.get("prompt", "")
             if not isinstance(prompt, str) or not prompt.strip():
                 return self._send_json({"text": "Leere Anfrage.", "actions": []}, 400)
-            self._send_json(self.agent.process_command(prompt))
+            history = req_data.get("history")
+            if not isinstance(history, list):
+                history = []
+            history = [t for t in history if isinstance(t, dict)]
+            self._send_json(self.agent.process_command(prompt[:2000], history))
 
         elif self.path == "/api/key":
             key = req_data.get("api_key", "")

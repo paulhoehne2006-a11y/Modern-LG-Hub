@@ -53,6 +53,8 @@ REPRESS_AFTER = 1.5          # a 'launch' of LG home this long after the pass = 
 ALLOW_MAX = 600              # LG home opened on purpose is given back to the launcher after this long
 WATCHDOG_SECONDS = 30        # safety net: poll the foreground app (also detects a restarted app manager)
 SAM = 'luna://com.webos.applicationManager/'
+SYSLOG = '/var/log/messages'
+VOICE_DEBOUNCE = 0.6         # one mic press can be logged more than once
 # Hidden system apps the launcher still wants artwork/metadata for.
 EXTRA_IDS = ('com.webos.app.hdmi1', 'com.webos.app.hdmi2', 'com.webos.app.hdmi3',
              'com.webos.app.hdmi4', 'com.webos.app.livetv', 'com.palm.app.settings')
@@ -451,7 +453,8 @@ def take_pass():
 
 
 def launch_launcher():
-    luna_fire(SAM + 'launch', {'id': APP_ID})
+    # explicit params, so a mic button's {'gemini': ...} never lingers in PalmSystem.launchParams
+    luna_fire(SAM + 'launch', {'id': APP_ID, 'params': {'reason': 'home'}})
     luna_fire(SAM + 'closeByAppId', {'id': LG_HOME})
     luna_fire('luna://com.webos.surfacemanager/closeByAppId', {'id': LG_HOME})
 
@@ -500,6 +503,68 @@ def on_life_event(st, ev):
         st.nag_left = 0
         if app == APP_ID:
             st.burst = []
+
+
+class VoiceKeyWatch:
+    """Follows the system log for the remote's mic button (lginput2 logs KEY_VOICE).
+
+    LG's own voice app is stubbed on this TV, so the button would do nothing; we use it
+    to open the Gemini popup in the launcher instead. `tail` exits by itself (SIGPIPE)
+    on the next log line if this daemon dies, so no orphan survives for long.
+    """
+    def __init__(self):
+        self.proc = None
+        self.fd = None
+        self.buf = b''
+        self.retry_at = 0.0
+        self.last = 0.0
+
+    def start(self):
+        if not os.path.exists(SYSLOG):
+            raise OSError('%s missing' % SYSLOG)
+        self.proc = subprocess.Popen(['tail', '-n', '0', '-F', SYSLOG], stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, close_fds=True)
+        self.fd = self.proc.stdout.fileno()
+        os.set_blocking(self.fd, False)
+        self.buf = b''
+
+    def failed(self):
+        self.stop()
+        self.retry_at = time.monotonic() + 10
+
+    def stop(self):
+        if self.proc:
+            try:
+                self.proc.kill()
+                self.proc.wait(timeout=2)
+            except Exception:
+                pass
+        self.proc, self.fd = None, None
+
+    def read_presses(self):
+        """Returns the number of mic presses seen, or None if tail ended."""
+        try:
+            chunk = os.read(self.fd, 65536)
+        except BlockingIOError:
+            return 0
+        except OSError:
+            return None
+        if not chunk:
+            return None
+        self.buf += chunk
+        lines = self.buf.split(b'\n')
+        self.buf = lines.pop()[-4096:]
+        return sum(1 for ln in lines if b'"button_type":"KEY_VOICE"' in ln)
+
+
+def on_voice_key(st, watch):
+    now = time.monotonic()
+    if now - watch.last < VOICE_DEBOUNCE or paused():
+        return
+    watch.last = now
+    mode = 'toggle' if st.last_fg == APP_ID else 'open'
+    log('mic button -> gemini %s (front: %s)' % (mode, st.last_fg))
+    luna_fire(SAM + 'launch', {'id': APP_ID, 'params': {'gemini': mode}})
 
 
 def wait_for_sam(st, seconds=180):
@@ -592,6 +657,7 @@ def daemon(boot):
     life = Subscription(SAM + 'getAppLifeEvents', {'subscribe': True})
     applist = Subscription(SAM + 'listApps', {'subscribe': True})
     subs = (life, applist)
+    voice = VoiceKeyWatch()
     mono = time.monotonic()
     refresh_at = mono + 60 if boot else 0.0          # store apps can be mounted late at boot
     if first == 'retry':
@@ -610,6 +676,12 @@ def daemon(boot):
                     except OSError as e:
                         log('subscribe failed (%s): %s' % (sub.uri, e))
                         sub.failed()
+            if voice.fd is None and now >= voice.retry_at:
+                try:
+                    voice.start()
+                except OSError as e:
+                    log('mic button watch failed: %s' % e)
+                    voice.failed()
             # timers
             while st.burst and st.burst[0] <= now:
                 st.burst.pop(0)
@@ -651,7 +723,11 @@ def daemon(boot):
             for sub in subs:
                 if sub.fd is None:
                     waits.append(max(sub.retry_at - now, 0.05))
+            if voice.fd is None:
+                waits.append(max(voice.retry_at - now, 0.05))
             fds = [s.fd for s in subs if s.fd is not None] + [wake_r]
+            if voice.fd is not None:
+                fds.append(voice.fd)
             try:
                 ready, _, _ = select.select(fds, [], [], min(waits))
             except (OSError, ValueError):
@@ -661,6 +737,13 @@ def daemon(boot):
                     os.read(wake_r, 64)
                 except OSError:
                     pass
+            if voice.fd is not None and voice.fd in ready:
+                presses = voice.read_presses()
+                if presses is None:
+                    log('mic button watch ended, restarting')
+                    voice.failed()
+                elif presses:
+                    on_voice_key(st, voice)
             for sub in subs:
                 if sub.fd is None or sub.fd not in ready:
                     continue
@@ -687,6 +770,7 @@ def daemon(boot):
 
     for sub in subs:
         sub.stop()
+    voice.stop()
     if st.usage_dirty_at:
         usage_flush(st.usage)
     log('daemon stop')

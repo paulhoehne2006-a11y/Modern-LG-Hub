@@ -1010,21 +1010,13 @@
         closeGeminiModal();
         return;
       }
-      const focusables = [...geminiModalEl.querySelectorAll('button')].filter(b => b.offsetParent !== null);
-      const activeIdx = focusables.indexOf(document.activeElement);
-      if (k === KEY.DOWN) {
+      if (k in DIRS) {
         e.preventDefault();
-        const next = focusables[activeIdx < 0 ? 0 : (activeIdx + 1) % focusables.length];
-        if (next) next.focus();
-        return;
-      }
-      if (k === KEY.UP) {
-        e.preventDefault();
-        const prev = focusables[activeIdx < 0 ? 0 : (activeIdx - 1 + focusables.length) % focusables.length];
-        if (prev) prev.focus();
+        geminiKey(k);
         return;
       }
       if (k === KEY.OK) {
+        if (e.repeat) { e.preventDefault(); return; }
         if (document.activeElement && typeof document.activeElement.click === 'function') {
           e.preventDefault();
           document.activeElement.click();
@@ -1216,11 +1208,12 @@
   // A relaunch means "Home was pressed" (launcherd redirects LG home here): start fresh at the top.
   // A plain return from an app (Back) keeps the focused card.
   let lastRelaunch = 0;
-  function onRelaunch() {
+  function onRelaunch(e) {
     const now = Date.now();
     if (now - lastRelaunch < 300) return;   // fired on both document and window
     lastRelaunch = now;
     onShown();
+    if (handleGeminiParam(launchParams(e))) return;   // mic button: open/close Gemini, keep the page as it is
     if (mode === 'menu') closeMenu();
     if (geminiModalOpen) closeGeminiModal();
     if (mode === 'move') endMove();
@@ -1274,11 +1267,13 @@
     95: ['⛈️', 'Gewitter']
   };
 
+  let lastWeather = null;          // raw forecast, also used as context for Gemini
   async function fetchWeather() {
     try {
       const res = await fetch('http://127.0.0.1:8080/api/weather');
       const data = await res.json();
       if (data && data.current) {
+        lastWeather = data;
         updateWeatherUI(data);
       }
     } catch (e) {
@@ -1428,109 +1423,279 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Gemini TV AI Assistant Modal (100% Remote-Driven, No Typing)        */
+  /* Gemini assistant: remote only (tiles + follow-up suggestions)      */
   /* ------------------------------------------------------------------ */
   let geminiModalOpen = false;
-  let lastPrompt = '';
+  let gmHistory = [];          // [{role: 'user'|'model', text}] - kept until the popup closes
+  let gmBusy = false;
+  let gmReq = 0;               // ignores answers that arrive after the popup was closed
   const geminiModalEl = $('gemini-modal');
   const geminiChatEl = $('gemini-chat');
+  const geminiChipsEl = $('gemini-chips');
   const geminiCloseBtn = $('gemini-close-btn');
   const geminiBackdropEl = $('gemini-backdrop');
-  const geminiStatusEl = $('gemini-panel-status');
-  const geminiRefreshBtn = $('gemini-refresh-btn');
+
+  const STREAMING = ['netflix', 'amazon', 'com.disney.disneyplus-prod', 'com.apple.appletv', 'com.skygo.app.de.q',
+    'joyn', 'com.netrtl.tvnow', 'de.telekom.magentatv', 'ard.mediathek', 'youtube.leanback.v4'];
+
+  function streamingApps() {
+    const names = state.apps.filter(a => STREAMING.includes(a.id)).map(a => a.title);
+    return names.length ? names.join(', ') : 'Netflix, Prime Video, Disney+, Apple TV, YouTube';
+  }
+
+  function weatherContext() {
+    const w = lastWeather;
+    if (!w || !w.current) return 'Aktuelle Wetterdaten sind gerade nicht verfügbar.';
+    const desc = (WMO_MAP[w.current.weather_code] || ['', 'unbekannt'])[1];
+    let s = 'Wetter jetzt: ' + Math.round(w.current.temperature_2m) + ' °C (gefühlt ' +
+      Math.round(w.current.apparent_temperature) + ' °C), ' + desc + '.';
+    const d = w.daily;
+    if (d && d.temperature_2m_max) {
+      const day = (i, n) => ' ' + n + ': ' + Math.round(d.temperature_2m_min[i]) + ' bis ' + Math.round(d.temperature_2m_max[i]) +
+        ' °C, ' + ((WMO_MAP[d.weather_code[i]] || ['', ''])[1]) + ', Regenrisiko ' + (d.precipitation_probability_max[i] || 0) + ' %.';
+      s += day(0, 'Heute');
+      if (d.temperature_2m_max.length > 1) s += day(1, 'Morgen');
+    }
+    return s;
+  }
+
+  const timeOfDay = () => new Date().toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+
+  // Topic rows. prompt() runs on click, so it uses the current apps / weather / time.
+  const GM_TOPICS = [
+    { label: 'Film-Tipps', items: [
+      { ico: '🌙', text: 'Was schaue ich heute?', prompt: () => 'Es ist ' + timeOfDay() + '. Empfiehl mir 3 Filme oder Serien für heute, die es auf meinen Diensten gibt: ' + streamingApps() + '. Nenne bei jedem den Dienst.' },
+      { ico: '🆕', text: 'Neue Serien', prompt: () => 'Welche neuen oder gerade beliebten Serien lohnen sich auf ' + streamingApps() + '? 3 Tipps mit Dienst und je einem Satz Begründung.' },
+      { ico: '🍿', text: 'Spannender Film', prompt: () => 'Empfiehl mir 3 spannende Filme (Thriller oder Action) auf ' + streamingApps() + '. Nenne jeweils den Dienst.' },
+      { ico: '😄', text: 'Was Leichtes', prompt: () => 'Ich will abschalten: 3 lustige oder entspannte Filme oder Serien auf ' + streamingApps() + ', mit Dienst.' },
+      { ico: '🌍', text: 'Dokus', prompt: () => 'Empfiehl mir 3 sehenswerte Dokumentationen auf ' + streamingApps() + ', mit Dienst.' }
+    ] },
+    { label: 'Wetter & Tag', items: [
+      { ico: '🧥', text: 'Was ziehe ich an?', prompt: () => weatherContext() + ' Was soll ich heute anziehen? Kurz und konkret.' },
+      { ico: '🚶', text: 'Lohnt sich rausgehen?', prompt: () => weatherContext() + ' Es ist ' + timeOfDay() + '. Lohnt sich jetzt ein Spaziergang oder eher später? Kurz.' },
+      { ico: '📅', text: 'Heute & morgen', prompt: () => weatherContext() + ' Fasse das Wetter für heute und morgen kurz und anschaulich zusammen.' },
+      { ico: '✨', text: 'Idee für den Abend', prompt: () => weatherContext() + ' Es ist ' + timeOfDay() + '. Schlag mir 3 Ideen für den Abend vor, passend zum Wetter.' }
+    ] },
+    { label: 'Wissen & Rezepte', items: [
+      { ico: '🎲', text: 'Fakt des Tages', prompt: () => 'Erzähle mir einen verblüffenden, wenig bekannten Fakt. Kurz und spannend erklärt.' },
+      { ico: '🍳', text: 'Schnelles Rezept', prompt: () => 'Schlage ein raffiniertes Abendessen vor, das in unter 20 Minuten fertig ist. Zutaten und Schritte kurz.' },
+      { ico: '💡', text: 'Erklär mir was', prompt: () => 'Erkläre mir ein spannendes Thema aus Wissenschaft oder Technik in 5 Sätzen, so dass es jeder versteht.' },
+      { ico: '🧠', text: 'Quizfrage', prompt: () => 'Stell mir eine knifflige Quizfrage mit 3 Antwortmöglichkeiten (A, B, C). Verrate die Lösung noch nicht.' }
+    ] }
+  ];
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Minimal, safe Markdown for answers: escape first, then **bold**, *italic*, headings, lists, paragraphs.
+  function renderAnswer(text) {
+    const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    let html = '', list = false, para = [];
+    const flushPara = () => { if (para.length) { html += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; } };
+    const flushList = () => { if (list) { html += '</ul>'; list = false; } };
+    for (const raw of String(text || '').split('\n')) {
+      const line = raw.trim();
+      const indented = /^\s{2,}/.test(raw);
+      const bullet = line.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+      const head = line.match(/^#{1,4}\s+(.*)$/);
+      if (!line) { flushPara(); flushList(); continue; }
+      if (head) { flushPara(); flushList(); html += '<h3>' + inline(head[1]) + '</h3>'; continue; }
+      if (bullet) { flushPara(); if (!list) { html += '<ul>'; list = true; } html += (indented ? '<li class="gm-sub">' : '<li>') + inline(bullet[1]) + '</li>'; continue; }
+      flushList(); para.push(line);
+    }
+    flushPara(); flushList();
+    return html;
+  }
+
+  function chip(ico, text, cls, onClick) {
+    const b = document.createElement('button');
+    b.className = 'gm-chip' + (cls ? ' ' + cls : '');
+    b.innerHTML = (ico ? '<span class="gm-ico">' + ico + '</span>' : '') + '<span>' + esc(text) + '</span>';
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function row(label, chips) {
+    const r = document.createElement('div');
+    r.className = 'gm-row';
+    const l = document.createElement('div');
+    l.className = 'gm-row-label';
+    l.textContent = label || '';
+    r.appendChild(l);
+    chips.forEach(c => r.appendChild(c));
+    return r;
+  }
+
+  function showTopicChips() {
+    geminiChipsEl.innerHTML = '';
+    for (const t of GM_TOPICS) {
+      geminiChipsEl.appendChild(row(t.label, t.items.map(it => chip(it.ico, it.text, '', () => askGemini(it.prompt(), it.text)))));
+    }
+  }
+
+  function showFollowUps(suggestions) {
+    geminiChipsEl.innerHTML = '';
+    const sug = (suggestions || []).map(s => chip('↳', s, 'gm-suggest', () => askGemini(s, s)));
+    if (sug.length) geminiChipsEl.appendChild(row('Nachfragen', sug));
+    geminiChipsEl.appendChild(row('', [
+      chip('🔄', 'Andere Vorschläge', 'gm-ghost', () => askGemini('Bitte gib mir andere, neue Vorschläge dazu.', 'Andere Vorschläge')),
+      chip('✦', 'Neues Thema', 'gm-ghost', resetGeminiChat)
+    ]));
+  }
+
+  function gmFocusables() {
+    return [...geminiChipsEl.querySelectorAll('.gm-chip')].filter(b => !b.disabled);
+  }
+
+  function focusFirstChip() {
+    const first = gmFocusables()[0];
+    if (first) first.focus();
+  }
+
+  function resetGeminiChat() {
+    gmReq++;
+    gmHistory = [];
+    gmBusy = false;
+    geminiChatEl.innerHTML = '<div class="gm-hello"><h1>Hallo! Worauf hast du Lust?</h1>' +
+      '<p>Wähle ein Thema – danach schlage ich dir passende Nachfragen vor.</p></div>';
+    showTopicChips();
+    focusFirstChip();
+  }
 
   function openGeminiModal() {
+    if (geminiModalOpen) return;
     geminiModalOpen = true;
-    if (geminiModalEl) geminiModalEl.style.display = 'flex';
-    const firstTile = geminiModalEl ? geminiModalEl.querySelector('.g-tile') : null;
-    if (firstTile) setTimeout(() => firstTile.focus(), 100);
+    geminiModalEl.style.display = 'flex';
+    resetGeminiChat();
+    requestAnimationFrame(() => geminiModalEl.classList.add('gm-in'));
   }
 
   function closeGeminiModal() {
+    if (!geminiModalOpen) return;
     geminiModalOpen = false;
-    if (geminiModalEl) geminiModalEl.style.display = 'none';
+    gmReq++;                                   // drop answers still on their way
+    gmHistory = [];
+    gmBusy = false;
+    geminiModalEl.classList.remove('gm-in');
+    geminiModalEl.style.display = 'none';
   }
 
-  async function triggerGeminiTile(promptText, tileLabel) {
-    if (!promptText) return;
-    lastPrompt = promptText;
+  function toggleGeminiModal() {
+    if (geminiModalOpen) closeGeminiModal(); else openGeminiModal();
+  }
 
-    if (geminiStatusEl) {
-      geminiStatusEl.innerHTML = '<span class="welcome-sparkle-sm">✨</span> ' + (tileLabel || 'Gemini') + ' wird generiert...';
-    }
+  async function askGemini(promptText, label) {
+    if (!promptText || gmBusy) return;
+    gmBusy = true;
+    const req = ++gmReq;
+    if (!gmHistory.length) geminiChatEl.innerHTML = '';
+    const q = document.createElement('div');
+    q.className = 'gm-q';
+    q.textContent = label || promptText;
+    geminiChatEl.appendChild(q);
+    const thinking = document.createElement('div');
+    thinking.className = 'gm-thinking';
+    thinking.innerHTML = '<span></span><span></span><span></span>';
+    geminiChatEl.appendChild(thinking);
+    q.scrollIntoView({ block: 'start' });
+    gmFocusables().forEach(b => { b.disabled = true; });
 
-    if (geminiChatEl) {
-      geminiChatEl.innerHTML = '<div class="thinking-indicator"><span>✨</span><span>Gemini denkt nach und bereitet die Antwort vor...</span></div>';
-    }
-
+    let data = null, failed = false;
     try {
       const res = await fetch('http://127.0.0.1:8080/api/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptText })
+        body: JSON.stringify({ prompt: promptText, history: gmHistory })
       });
-      const data = await res.json();
+      data = await res.json();
+    } catch (e) {
+      failed = true;
+    }
+    if (req !== gmReq) return;                 // popup closed or reset meanwhile
+    gmBusy = false;
+    thinking.remove();
 
-      if (geminiStatusEl) {
-        geminiStatusEl.innerHTML = '✨ ' + (tileLabel || 'Antwort');
+    const a = document.createElement('div');
+    a.className = 'gm-a' + (failed ? ' gm-err' : '');
+    if (failed) {
+      a.textContent = 'Der Gemini-Dienst auf dem TV ist gerade nicht erreichbar.';
+    } else {
+      a.innerHTML = renderAnswer(data.text || 'Keine Antwort erhalten.');
+      if (Array.isArray(data.actions) && data.actions.length) {
+        const acts = document.createElement('div');
+        acts.className = 'gm-acts';
+        data.actions.forEach(x => {
+          const t = document.createElement('span');
+          t.className = 'gm-act';
+          t.textContent = '⚡ ' + x.tool;
+          acts.appendChild(t);
+        });
+        a.appendChild(acts);
       }
-
-      if (geminiRefreshBtn) {
-        geminiRefreshBtn.style.display = 'inline-block';
-      }
-
-      if (geminiChatEl) {
-        geminiChatEl.innerHTML = '';
-        const card = document.createElement('div');
-        card.className = 'gemini-answer-card';
-        card.textContent = data.text || 'Keine Antwort erhalten.';
-
-        if (Array.isArray(data.actions) && data.actions.length > 0) {
-          const actionTag = document.createElement('div');
-          actionTag.className = 'chat-action-tag';
-          actionTag.textContent = '⚡ ' + data.actions.map(a => a.tool).join(', ');
-          card.appendChild(actionTag);
-        }
-
-        geminiChatEl.appendChild(card);
-        geminiChatEl.scrollTop = 0;
-      }
-
-      if (Array.isArray(data.actions) && data.actions.some(a => a.tool && (a.tool.includes('smart') || a.tool.includes('screen')))) {
+      gmHistory.push({ role: 'user', text: promptText }, { role: 'model', text: data.text || '' });
+      if (Array.isArray(data.actions) && data.actions.some(x => x.tool && (x.tool.includes('smart') || x.tool.includes('screen')))) {
         setTimeout(fetchSmartThingsDevices, 1200);
       }
-    } catch (err) {
-      if (geminiStatusEl) geminiStatusEl.textContent = '⚠️ Verbindungsfehler';
-      if (geminiChatEl) {
-        geminiChatEl.innerHTML = '<div style="color: #ff453a; font-size: 22px;">Verbindungsfehler zum lokalen Gemini-Dienst auf dem TV.</div>';
+    }
+    geminiChatEl.appendChild(a);
+    q.scrollIntoView({ block: 'start' });
+    showFollowUps(failed ? [] : data.suggestions);
+    focusFirstChip();
+  }
+
+  // D-pad inside the popup: left/right within a row, up/down to the nearest chip of the next row;
+  // beyond the top/bottom row, up/down scrolls the answer instead.
+  function geminiKey(k) {
+    const chips = gmFocusables();
+    if (!chips.length) {
+      if (k === KEY.UP) geminiChatEl.scrollTop -= 260;
+      if (k === KEY.DOWN) geminiChatEl.scrollTop += 260;
+      return;
+    }
+    const cur = document.activeElement;
+    if (!chips.includes(cur)) { chips[0].focus(); return; }
+    const rows = [...geminiChipsEl.querySelectorAll('.gm-row')]
+      .map(r => [...r.querySelectorAll('.gm-chip')].filter(b => !b.disabled)).filter(r => r.length);
+    const ri = rows.findIndex(r => r.includes(cur));
+    const ci = rows[ri].indexOf(cur);
+    if (k === KEY.LEFT && ci > 0) rows[ri][ci - 1].focus();
+    else if (k === KEY.RIGHT && ci < rows[ri].length - 1) rows[ri][ci + 1].focus();
+    else if (k === KEY.UP || k === KEY.DOWN) {
+      const ti = ri + (k === KEY.UP ? -1 : 1);
+      if (ti < 0) { geminiChatEl.scrollTop -= 260; return; }
+      if (ti >= rows.length) { geminiChatEl.scrollTop += 260; return; }
+      const x = cur.getBoundingClientRect().left + cur.offsetWidth / 2;
+      let best = rows[ti][0], bd = Infinity;
+      for (const b of rows[ti]) {
+        const d = Math.abs(b.getBoundingClientRect().left + b.offsetWidth / 2 - x);
+        if (d < bd) { bd = d; best = b; }
       }
+      best.focus();
     }
   }
 
   function initGeminiUI() {
     if (geminiCloseBtn) geminiCloseBtn.addEventListener('click', closeGeminiModal);
     if (geminiBackdropEl) geminiBackdropEl.addEventListener('click', closeGeminiModal);
+  }
 
-    const sidebar = document.querySelector('.gemini-sidebar');
-    if (sidebar) {
-      sidebar.addEventListener('click', e => {
-        const tile = e.target.closest('.g-tile');
-        if (tile && tile.dataset.prompt) {
-          sidebar.querySelectorAll('.g-tile').forEach(t => t.classList.remove('active'));
-          tile.classList.add('active');
-          const label = tile.querySelector('.g-tile-label') ? tile.querySelector('.g-tile-label').textContent : '';
-          triggerGeminiTile(tile.dataset.prompt, label);
-        }
-      });
+  // Launch parameters: launcherd.py starts us with {gemini: 'open'|'toggle'} for the mic button
+  // and with {reason: 'home'} for Home, so old parameters never linger.
+  function launchParams(e) {
+    let p = e && e.detail;
+    if (!p || typeof p !== 'object') {
+      try { p = JSON.parse((window.PalmSystem && window.PalmSystem.launchParams) || '{}'); } catch (_) { p = {}; }
     }
+    return p || {};
+  }
 
-    if (geminiRefreshBtn) {
-      geminiRefreshBtn.addEventListener('click', () => {
-        if (lastPrompt) {
-          triggerGeminiTile(lastPrompt + ' (Bitte gib mir noch 2 ganz andere, neue Vorschläge/Alternativen dazu)', 'Neue Vorschläge');
-        }
-      });
-    }
+  function handleGeminiParam(p) {
+    if (!p || !p.gemini) return false;
+    if (mode === 'menu') closeMenu();
+    if (mode === 'move') endMove();
+    if (p.gemini === 'toggle') toggleGeminiModal(); else openGeminiModal();
+    return true;
   }
 
   async function start() {
@@ -1570,6 +1735,7 @@
     } finally {
       requestAnimationFrame(() => document.body.classList.remove('booting'));
     }
+    handleGeminiParam(launchParams(null));    // first start via the mic button (app was not running)
     lunaSubscribe('luna://com.webos.service.eim/getAllInputStatus', {}, msg => {
       if (Array.isArray(msg.devices)) { state.devices = msg.devices; requestRender(); }
     });
