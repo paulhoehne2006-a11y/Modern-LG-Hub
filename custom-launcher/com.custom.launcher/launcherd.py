@@ -70,6 +70,14 @@ ICON_KEYS = ('extraLargeIcon', 'largeIcon', 'mediumLargeIcon', 'icon')   # best 
 # after the launch (measured), so retries before that only add load.
 BURST = (0.0, 0.25, 0.45)
 MEMMGR_KEEPALIVE = 'com.webos.memorymanager.KeepAlive'   # memchute's own list (see ensure_memchute_keep_alive)
+# Home key straight to the launcher (see set_home_key): the compositor's key filters come from
+# configd, and their Home handler is patched in a copy generated from the TV's own file.
+KEYFILTER_CFG = 'com.webos.surfacemanager.keyFilters'
+KEYFILTER_ORIG = ('/usr/lib/qt5/qml/KeyFilters/systemUi.js', '/usr/lib/qml/KeyFilters/systemUi.js')
+KEYFILTER_COPY = '/var/lib/webosbrew/custom-launcher-keyfilter/systemUi.js'
+KEYFILTER_OLD = ('applicationManager.launchDefaultApp(JSON.stringify({"category": "home", "params": '
+                 '{"activateType": getActivateType(key), "launchType": "homeKey"}}));')
+KEYFILTER_NEW = 'applicationManager.launch("%s", JSON.stringify({"reason": "home"}));' % APP_ID
 USAGE_PERSIST = '/var/lib/webosbrew/custom-launcher-usage.json'   # survives reinstalling the app
 USAGE_HALF_LIFE = 45 * 86400        # a launch counts half as much after 45 days
 USAGE_FLUSH_DELAY = 5.0             # seconds; batches writes, keeps the order fresh when returning home
@@ -440,6 +448,7 @@ class State:
     last_fg = None         # app that was in front before the current event
     started = 0.0
     quiet = 0.0
+    home_key_direct = False   # compositor's Home key opens the launcher itself (set_home_key)
 
     def __init__(self):
         self.trim_closed_at = {}     # app id -> monotonic time we last closed it
@@ -644,6 +653,65 @@ def ensure_keep_alive():
     ensure_memchute_keep_alive()
 
 
+_keyfilter_warned = False
+
+
+def set_home_key(st, direct):
+    """Let the Home key open the launcher itself (direct=True) or LG home again (False).
+
+    The compositor (surface-manager) runs the key filters listed in configd
+    com.webos.surfacemanager.keyFilters and reloads them live when that config changes. Its
+    Home handler calls launchDefaultApp(home) = LG home, which the redirect then had to close:
+    LG home flashed up for ~0.1 s on every press. We point those entries at a copy of the TV's
+    own systemUi.js in which only that one call is replaced. The config change is in-memory
+    (a reboot restores LG's original) and is undone on pause or a clean daemon stop.
+    If a firmware update changes the line, nothing is patched and the redirect still works.
+    """
+    global _keyfilter_warned
+    try:
+        reply = luna_call('luna://com.webos.service.config/getConfigs', {'configNames': [KEYFILTER_CFG]}, timeout=6)
+        cfg = (reply.get('configs') or {}).get(KEYFILTER_CFG)
+        if not isinstance(cfg, list):
+            return
+        orig = next((p for p in KEYFILTER_ORIG if os.path.exists(p)), None)
+        uses_orig = any(isinstance(f, dict) and f.get('file') in KEYFILTER_ORIG for f in cfg)
+        uses_copy = any(isinstance(f, dict) and f.get('file') == KEYFILTER_COPY for f in cfg)
+        if direct:
+            src = open(orig, encoding='utf-8').read() if orig else ''
+            if src.count(KEYFILTER_OLD) != 1:
+                if not _keyfilter_warned:
+                    _keyfilter_warned = True
+                    log('home key: compositor key filter not recognised, keeping the LG home redirect')
+                direct = False                       # fall through: undo an older patch if present
+            else:
+                patched = src.replace(KEYFILTER_OLD, KEYFILTER_NEW)
+                try:
+                    current = open(KEYFILTER_COPY, encoding='utf-8').read()
+                except OSError:
+                    current = None
+                if current != patched:
+                    os.makedirs(os.path.dirname(KEYFILTER_COPY), exist_ok=True)
+                    tmp = KEYFILTER_COPY + '.tmp'
+                    with open(tmp, 'w', encoding='utf-8') as f:
+                        f.write(patched)
+                    os.replace(tmp, KEYFILTER_COPY)
+                if uses_orig:
+                    new = [dict(f, file=KEYFILTER_COPY) if isinstance(f, dict) and f.get('file') in KEYFILTER_ORIG
+                           else f for f in cfg]
+                    res = luna_call('luna://com.webos.service.config/setConfigs', {'configs': {KEYFILTER_CFG: new}}, timeout=6)
+                    log('home key -> %s: %s' % (APP_ID, 'ok' if res.get('returnValue') else res))
+                st.home_key_direct = True
+                return
+        if not direct and uses_copy:
+            back = orig or KEYFILTER_ORIG[0]
+            new = [dict(f, file=back) if isinstance(f, dict) and f.get('file') == KEYFILTER_COPY else f for f in cfg]
+            res = luna_call('luna://com.webos.service.config/setConfigs', {'configs': {KEYFILTER_CFG: new}}, timeout=6)
+            log('home key -> LG home (original): %s' % ('ok' if res.get('returnValue') else res))
+        st.home_key_direct = False
+    except Exception as e:
+        log('home key setup failed: %r' % (e,))
+
+
 _memchute_restarted = False
 
 
@@ -838,6 +906,9 @@ def daemon(boot):
                 if not paused():
                     guard_default_home()
                     ensure_keep_alive()
+                    set_home_key(st, True)
+            if st.home_key_direct and paused():           # off switch / uninstall: give Home back to LG at once
+                set_home_key(st, False)
             if now >= trim_at:
                 trim_at = now + TRIM_SECONDS
                 trim_background(st)
@@ -906,6 +977,8 @@ def daemon(boot):
     for sub in subs:
         sub.stop()
     voice.stop()
+    if st.home_key_direct:
+        set_home_key(st, False)          # without the daemon nobody re-checks the patch: LG's original
     if st.usage_dirty_at:
         usage_flush(st.usage)
     log('daemon stop')
