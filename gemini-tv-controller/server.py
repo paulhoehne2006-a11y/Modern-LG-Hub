@@ -304,6 +304,8 @@ class ThreadingServer(socketserver.ThreadingMixIn, HTTPServer):
 
 
 def run_server():
+    import st_oauth
+    st_oauth.start_keepalive()          # keeps the SmartThings OAuth tokens fresh (no-op until set up)
     httpd = ThreadingServer((BIND, PORT), RequestHandler)
     print(f"Modern LG Hub Backend running on {BIND}:{PORT}")
     try:

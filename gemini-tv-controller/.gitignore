@@ -2,3 +2,6 @@
 *.env
 __pycache__/
 *.pyc
+st_tokens.json
+st_tokens.json.tmp
+.st_oauth_state

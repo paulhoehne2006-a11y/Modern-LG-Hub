@@ -3,6 +3,7 @@ SmartThings REST API Client for LG TV Dashboard and Gemini Agent.
 """
 
 import os
+import sys
 import re
 import json
 import time
@@ -10,10 +11,15 @@ from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 import urllib.error
 from typing import Dict, Any, List, Optional
+import st_oauth
 
 ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
 
 def get_token() -> str:
+    """OAuth access token (auto-refreshed, see st_oauth.py); falls back to a 24 h PAT."""
+    token = st_oauth.access_token()
+    if token:
+        return token
     token = os.environ.get("SMARTTHINGS_TOKEN", "")
     if not token and os.path.exists(ENV_FILE):
         try:
@@ -33,7 +39,7 @@ _DEVICE_ID_RE = re.compile(r"^[0-9A-Za-z-]{1,64}$")
 def _valid_id(device_id) -> bool:
     return isinstance(device_id, str) and bool(_DEVICE_ID_RE.match(device_id))
 
-def api_request(endpoint: str, method: str = "GET", data: Optional[dict] = None) -> Any:
+def api_request(endpoint: str, method: str = "GET", data: Optional[dict] = None, _retry: bool = True) -> Any:
     token = get_token()
     if not token:
         return {"error": "No SmartThings token configured"}
@@ -53,7 +59,16 @@ def api_request(endpoint: str, method: str = "GET", data: Optional[dict] = None)
             return json.loads(content) if content else {"status": resp.status}
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="ignore")
-        return {"error": f"HTTP {e.code}", "details": err}
+        if e.code == 401 and _retry and st_oauth.configured():
+            # access token rejected early (e.g. revoked): refresh once and retry
+            try:
+                st_oauth.refresh(force=True)
+                return api_request(endpoint, method, data, _retry=False)
+            except Exception as re_err:
+                return {"error": "HTTP 401", "details": f"Token-Erneuerung fehlgeschlagen: {re_err}"}
+        if e.code == 401:
+            print("[smartthings] 401 – Token abgelaufen? OAuth einrichten: python3 st_oauth.py help", file=sys.stderr)
+        return {"error": f"HTTP {e.code}", "details": err[:500]}
     except Exception as e:
         return {"error": str(e)}
 

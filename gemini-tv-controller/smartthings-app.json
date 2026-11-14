@@ -1,0 +1,14 @@
+{
+  "appName": "lg-hub-tv",
+  "displayName": "LG Hub TV",
+  "description": "Persoenlicher Zugriff des LG-TV-Hubs auf die eigenen SmartThings-Geraete",
+  "appType": "API_ONLY",
+  "classifications": ["CONNECTED_SERVICE"],
+  "singleInstance": true,
+  "apiOnly": {},
+  "oauth": {
+    "clientName": "LG Hub TV",
+    "scope": ["r:devices:*", "x:devices:*", "r:locations:*"],
+    "redirectUris": ["https://localhost/callback"]
+  }
+}
