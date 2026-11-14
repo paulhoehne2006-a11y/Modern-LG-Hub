@@ -1,0 +1,15 @@
+{
+  "_comment": "Lokale Smart-Home-Geräte. Erkannt werden sie über die MAC; 'ip' ist nur ein Startwert und wird automatisch nachgeführt. Reihenfolge = Standard-Reihenfolge der Hub-Kacheln.",
+  "devices": [
+    {"mac": "0a0000000001", "kind": "wiz",  "room": "Arbeitszimmer", "name": "Deckenlampe",    "ip": "192.168.178.202"},
+    {"mac": "0a0000000002", "kind": "wiz",  "room": "Arbeitszimmer", "name": "Fernseher Bar",  "ip": "192.168.178.201"},
+    {"mac": "0a0000000003", "kind": "tapo", "room": "Arbeitszimmer", "name": "Bett",           "ip": "192.168.178.203"},
+    {"mac": "0a0000000004", "kind": "tapo", "room": "Arbeitszimmer", "name": "Kühlschrank",    "ip": "192.168.178.204"},
+    {"mac": "0a0000000005", "kind": "wiz",  "room": "Wohnzimmer",   "name": "Licht",          "ip": "192.168.178.205"},
+    {"mac": "0a0000000006", "kind": "wiz",  "room": "Wohnzimmer",   "name": "Licht 2",        "ip": "192.168.178.206"},
+    {"mac": "0a0000000007", "kind": "wiz",  "room": "Wohnzimmer",   "name": "Fernseher Bar 1", "ip": "192.168.178.207"},
+    {"mac": "0a0000000008", "kind": "wiz",  "room": "Wohnzimmer",   "name": "Fernseher Bar 2", "ip": "192.168.178.208"},
+    {"mac": "0a0000000009", "kind": "wiz",  "room": "Esszimmer",    "name": "Essen",          "ip": "192.168.178.209"},
+    {"mac": "0a000000000a", "kind": "wiz",  "room": "Büro",         "name": "Licht",          "ip": "192.168.178.210"}
+  ]
+}

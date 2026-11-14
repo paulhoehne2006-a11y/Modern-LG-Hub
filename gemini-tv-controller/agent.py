@@ -8,6 +8,7 @@ import os
 import json
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List
 from tv import LGTV
 
@@ -194,17 +195,24 @@ TOOLS_DECLARATION = [
     },
     {
         "name": "control_smart_device",
-        "description": "Steuert SmartHome-Geräte (SmartThings: Lampen, Lichter, Steckdosen, Schalter).",
+        "description": ("Schaltet Smart-Home-Geräte im Heimnetz (WiZ-Lampen, Tapo-Steckdosen) an/aus und dimmt Lampen. "
+                        "Ein Raumname allein schaltet alle Geräte im Raum. Räume: Arbeitszimmer (Deckenlampe, Fernseher Bar, "
+                        "Steckdosen Bett und Kühlschrank), Wohnzimmer (Licht, Licht 2, Fernseher Bar 1, Fernseher Bar 2), "
+                        "Esszimmer (Essen), Büro (Licht)."),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "device_name": {
                     "type": "STRING",
-                    "description": "Name des Geräts (z.B. 'TV-Licht' / 'TV-Leiste', 'Wohnzimmer', 'Deckenlicht' / 'Decke Arbeitszimmer', 'Schreibtisch', 'Bett', 'Büro', 'Bar')"
+                    "description": "Gerät und/oder Raum, z.B. 'Wohnzimmer', 'Deckenlampe', 'Bar im Wohnzimmer', 'Bett', 'Büro'"
                 },
                 "state": {
                     "type": "STRING",
                     "description": "'on' (einschalten) oder 'off' (ausschalten)"
+                },
+                "brightness": {
+                    "type": "INTEGER",
+                    "description": "Optional: Helligkeit 10-100 % (nur Lampen, schaltet sie dabei ein)"
                 }
             },
             "required": ["device_name", "state"]
@@ -212,29 +220,32 @@ TOOLS_DECLARATION = [
     }
 ]
 
-from smartthings import SmartThings
+import localhome
 
 def execute_tool(name: str, args: dict) -> dict:
-    """Dispatches tool call to LGTV or SmartThings controller."""
+    """Dispatches tool call to LGTV or the local smart-home controller."""
     if name == "control_smart_device":
-        dev = str(args.get("device_name") or "").strip().lower()
+        dev = str(args.get("device_name") or "").strip()
         st = str(args.get("state") or "on").strip().lower()
+        bri = args.get("brightness")
+        bri = int(bri) if isinstance(bri, (int, float)) and not isinstance(bri, bool) else None
+        if bri is not None:
+            st = "on"
         if not dev:
             return {"error": "Kein Gerätename angegeben"}
-        # Find matching device ID
-        devices = SmartThings.get_dashboard_devices()
-        matched = None
-        for d in devices:
-            if dev in d["name"].lower() or dev in d["raw_name"].lower():
-                matched = d
-                break
-        if not matched and "tv" in dev:
-            matched = next((d for d in devices if "tv" in d["name"].lower()), None)
-        if matched:
-            res = SmartThings.set_switch(matched["id"], st)
-            LGTV.toast(f"SmartHome: {matched['name']} -> {st.upper()}")
-            return {"device": matched["name"], "state": st, "success": True, "res": res}
-        return {"error": f"Gerät '{dev}' nicht in SmartThings gefunden"}
+        matched = localhome.find_devices(dev)
+        if not matched:
+            return {"error": f"Gerät '{dev}' nicht gefunden"}
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(lambda d: localhome.set_switch(d["mac"], st, bri), matched))
+        names = [localhome.display_name(d) for d in matched]
+        failed = [n for n, r in zip(names, results) if r.get("status") != "ok"]
+        word = (f"{bri} %" if bri is not None else "AN") if st == "on" else "AUS"
+        LGTV.toast(f"Smart Home: {', '.join(names)} -> {word}" + (f" (Fehler: {', '.join(failed)})" if failed else ""))
+        out = {"devices": names, "state": st, "success": not failed}
+        if failed:
+            out["failed"] = {n: r.get("error") for n, r in zip(names, results) if r.get("status") != "ok"}
+        return out
     if name == "launch_app":
         app = args.get("app_name", "")
         res = LGTV.launch_app(app)
@@ -409,7 +420,10 @@ class GeminiTVAgent:
                 elif t == "show_toast":
                     summaries.append(f"'{args.get('message', '')}' auf dem TV angezeigt")
                 elif t == "control_smart_device":
-                    state_de = "eingeschaltet" if args.get('state') == 'on' else "ausgeschaltet"
+                    if isinstance(args.get('brightness'), (int, float)):
+                        state_de = f"auf {int(args['brightness'])} % gestellt"
+                    else:
+                        state_de = "eingeschaltet" if args.get('state') == 'on' else "ausgeschaltet"
                     summaries.append(f"{args.get('device_name', 'Gerät')} {state_de}")
                 elif t == "media_control":
                     summaries.append(f"Wiedergabe: {args.get('action', '')}")

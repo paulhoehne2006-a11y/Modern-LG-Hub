@@ -1,0 +1,575 @@
+"""
+Local smart-home control over the LAN (no cloud): WiZ bulbs (UDP 38899) and
+TP-Link Tapo plugs (KLAP over HTTP). Replaces the SmartThings cloud client.
+
+Devices are listed in devices.json and identified by MAC; their IPs are learned
+automatically (WiZ broadcast / ARP table) and cached in ip-cache.json, so DHCP
+changes don't break anything.
+
+Tapo needs the TP-Link account e-mail/password for the KLAP handshake (it never
+leaves the LAN): TAPO_EMAIL / TAPO_PASSWORD in .env, read on every handshake.
+"""
+
+import ctypes
+import ctypes.util
+import hashlib
+import json
+import os
+import re
+import socket
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DEVICES_FILE = os.path.join(HERE, "devices.json")
+IP_CACHE_FILE = os.path.join(HERE, "ip-cache.json")
+ENV_FILE = os.path.join(HERE, ".env")
+
+WIZ_PORT = 38899
+DASHBOARD_TTL = 5.0         # s; the launcher polls the dashboard regularly
+REDISCOVER_EVERY = 60.0     # s; at most one LAN rediscovery per minute
+
+_MAC_RE = re.compile(r"^[0-9a-f]{12}$")
+_lock = threading.Lock()
+_cache: Dict[str, Any] = {"dash": None, "dash_at": 0.0, "discovered_at": 0.0}
+
+
+def norm_mac(mac: str) -> str:
+    return re.sub(r"[^0-9a-f]", "", str(mac or "").lower())
+
+
+def valid_id(dev_id) -> bool:
+    return isinstance(dev_id, str) and bool(_MAC_RE.match(dev_id))
+
+
+def _log(msg: str) -> None:
+    print(f"[localhome] {msg}", file=sys.stderr, flush=True)
+
+
+# ---- device list & IP cache -------------------------------------------------
+
+def load_devices() -> List[Dict[str, Any]]:
+    try:
+        with open(DEVICES_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f).get("devices", [])
+    except Exception as e:
+        _log(f"devices.json unreadable: {e}")
+        return []
+    ips = _load_ip_cache()
+    out = []
+    for d in raw:
+        mac = norm_mac(d.get("mac"))
+        if not valid_id(mac) or d.get("kind") not in ("wiz", "tapo"):
+            continue
+        out.append({
+            "mac": mac,
+            "kind": d["kind"],
+            "room": str(d.get("room") or ""),
+            "name": str(d.get("name") or mac),
+            "ip": ips.get(mac) or d.get("ip") or "",
+        })
+    return out
+
+
+def _load_ip_cache() -> Dict[str, str]:
+    try:
+        with open(IP_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {k: v for k, v in data.items() if isinstance(v, str)}
+    except Exception:
+        return {}
+
+
+def _remember_ip(mac: str, ip: str) -> None:
+    with _lock:
+        cache = _load_ip_cache()
+        if cache.get(mac) == ip:
+            return
+        cache[mac] = ip
+        tmp = IP_CACHE_FILE + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cache, f)
+            os.replace(tmp, IP_CACHE_FILE)
+        except Exception as e:
+            _log(f"ip cache not written: {e}")
+    _log(f"{mac} is now at {ip}")
+
+
+def _device(dev_id: str) -> Optional[Dict[str, Any]]:
+    mac = norm_mac(dev_id)
+    return next((d for d in load_devices() if d["mac"] == mac), None)
+
+
+def _subnet_prefix() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.168.178.1", 9))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip.rsplit(".", 1)[0] + "."
+    except Exception:
+        return "192.168.178."
+
+
+def rediscover(force: bool = False) -> Dict[str, str]:
+    """Find the current IPs of all devices (WiZ broadcast + ARP table). Rate-limited."""
+    now = time.time()
+    if not force and now - _cache["discovered_at"] < REDISCOVER_EVERY:
+        return {}
+    _cache["discovered_at"] = now
+    found: Dict[str, str] = {}
+    # WiZ answers a broadcast with its MAC.
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.settimeout(0.3)
+        msg = b'{"method":"getSystemConfig","params":{}}'
+        end = time.time() + 2.0
+        next_send = 0.0
+        while time.time() < end:
+            if time.time() >= next_send:
+                s.sendto(msg, ("255.255.255.255", WIZ_PORT))
+                next_send = time.time() + 0.5
+            try:
+                data, addr = s.recvfrom(4096)
+            except socket.timeout:
+                continue
+            try:
+                mac = norm_mac(json.loads(data).get("result", {}).get("mac"))
+            except Exception:
+                continue
+            if valid_id(mac):
+                found[mac] = addr[0]
+        s.close()
+    except Exception as e:
+        _log(f"wiz discovery failed: {e}")
+    # Everything else (Tapo): touch every address so the kernel ARP table fills up.
+    try:
+        prefix = _subnet_prefix()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for i in range(1, 255):
+            try:
+                s.sendto(b"", (prefix + str(i), 9))
+            except OSError:
+                pass
+        s.close()
+        time.sleep(1.5)
+        with open("/proc/net/arp", "r") as f:
+            for line in f.readlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 4 and parts[2] != "0x0":
+                    mac = norm_mac(parts[3])
+                    if valid_id(mac) and mac != "000000000000":
+                        found.setdefault(mac, parts[0])
+    except Exception as e:
+        _log(f"arp discovery failed: {e}")
+    known = {d["mac"]: d["ip"] for d in load_devices()}
+    for mac, ip in found.items():
+        if mac in known and known[mac] != ip:
+            _remember_ip(mac, ip)
+    return found
+
+
+# ---- WiZ (UDP JSON) ------------------------------------------------------------
+
+def _wiz_call(ip: str, method: str, params: Optional[dict] = None, tries: int = 3) -> Dict[str, Any]:
+    if not ip:
+        raise OSError("no IP")
+    msg = json.dumps({"id": 1, "method": method, "params": params or {}}).encode()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0.5)
+    try:
+        for _ in range(tries):
+            s.sendto(msg, (ip, WIZ_PORT))
+            deadline = time.time() + 0.5
+            while time.time() < deadline:
+                try:
+                    data, addr = s.recvfrom(4096)
+                except socket.timeout:
+                    break
+                if addr[0] != ip:
+                    continue
+                res = json.loads(data)
+                if "error" in res:
+                    raise OSError(f"WiZ error: {res['error']}")
+                if res.get("method") == method:
+                    return res.get("result", {})
+    finally:
+        s.close()
+    raise OSError(f"no answer from {ip}")
+
+
+# WiZ scenes without own colour info -> approximate colour temperature
+_SCENE_KELVIN = {6: 2200, 9: 4000, 10: 2700, 11: 2700, 12: 4200, 13: 6500, 14: 2200, 16: 2200,
+                 18: 2400, 29: 3000, 30: 3500, 31: 2700, 32: 3200}
+
+
+def _kelvin_rgb(k: float):
+    """Colour of a white light at k kelvin (Tanner Helland's approximation)."""
+    import math
+    t = max(1000.0, min(40000.0, float(k))) / 100.0
+    r = 255.0 if t <= 66 else 329.698727446 * ((t - 60) ** -0.1332047592)
+    g = 99.4708025861 * math.log(t) - 161.1195681661 if t <= 66 else 288.1221695283 * ((t - 60) ** -0.0755148492)
+    b = 255.0 if t >= 66 else (0.0 if t <= 19 else 138.5177312231 * math.log(t - 10) - 305.0447927307)
+    return tuple(int(max(0, min(255, v))) for v in (r, g, b))
+
+
+def _wiz_color(r: dict) -> str:
+    if all(isinstance(r.get(c), int) for c in ("r", "g", "b")) and (r["r"] or r["g"] or r["b"]):
+        rgb = (r["r"], r["g"], r["b"])
+    elif isinstance(r.get("temp"), (int, float)):
+        rgb = _kelvin_rgb(r["temp"])
+    else:
+        rgb = _kelvin_rgb(_SCENE_KELVIN.get(r.get("sceneId"), 2700))
+    return "#%02x%02x%02x" % rgb
+
+
+def _wiz_status(d) -> Dict[str, Any]:
+    r = _wiz_call(d["ip"], "getPilot")
+    return {"state": "on" if r.get("state") else "off", "brightness": r.get("dimming"), "color": _wiz_color(r)}
+
+
+def _wiz_set(d, on: Optional[bool] = None, brightness: Optional[int] = None) -> None:
+    params: Dict[str, Any] = {}
+    if on is not None:
+        params["state"] = bool(on)
+    if brightness is not None:
+        params["dimming"] = max(10, min(100, int(brightness)))   # WiZ accepts 10..100
+        params.setdefault("state", True)
+    _wiz_call(d["ip"], "setPilot", params)
+
+
+# ---- Tapo (KLAP) -------------------------------------------------------------
+
+class _AES:
+    """AES-128-CBC with PKCS7 via the system libcrypto (no Python crypto package on the TV)."""
+    _lib = None
+
+    @classmethod
+    def lib(cls):
+        if cls._lib is None:
+            lib = ctypes.CDLL(ctypes.util.find_library("crypto") or "libcrypto.so.3")
+            lib.EVP_CIPHER_CTX_new.restype = ctypes.c_void_p
+            lib.EVP_CIPHER_CTX_free.argtypes = [ctypes.c_void_p]
+            lib.EVP_aes_128_cbc.restype = ctypes.c_void_p
+            for fn in ("EVP_EncryptInit_ex", "EVP_DecryptInit_ex"):
+                getattr(lib, fn).argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                             ctypes.c_char_p, ctypes.c_char_p]
+            for fn in ("EVP_EncryptUpdate", "EVP_DecryptUpdate"):
+                getattr(lib, fn).argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int),
+                                             ctypes.c_char_p, ctypes.c_int]
+            for fn in ("EVP_EncryptFinal_ex", "EVP_DecryptFinal_ex"):
+                getattr(lib, fn).argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int)]
+            cls._lib = lib
+        return cls._lib
+
+    @classmethod
+    def run(cls, encrypt: bool, key: bytes, iv: bytes, data: bytes) -> bytes:
+        lib = cls.lib()
+        pre = "EVP_Encrypt" if encrypt else "EVP_Decrypt"
+        ctx = lib.EVP_CIPHER_CTX_new()
+        try:
+            if not getattr(lib, pre + "Init_ex")(ctx, lib.EVP_aes_128_cbc(), None, key, iv):
+                raise OSError("AES init failed")
+            buf = ctypes.create_string_buffer(len(data) + 32)
+            n1, n2 = ctypes.c_int(0), ctypes.c_int(0)
+            if not getattr(lib, pre + "Update")(ctx, buf, ctypes.byref(n1), data, len(data)):
+                raise OSError("AES update failed")
+            tail = ctypes.create_string_buffer(32)
+            if not getattr(lib, pre + "Final_ex")(ctx, tail, ctypes.byref(n2)):
+                raise OSError("AES final failed (wrong key?)")
+            return buf.raw[:n1.value] + tail.raw[:n2.value]
+        finally:
+            lib.EVP_CIPHER_CTX_free(ctx)
+
+
+def _sha256(b: bytes) -> bytes:
+    return hashlib.sha256(b).digest()
+
+
+def _env_value(key: str) -> str:
+    val = os.environ.get(key, "")
+    if val:
+        return val
+    try:
+        with open(ENV_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(key + "="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return ""
+
+
+def _tapo_credentials():
+    email, pw = _env_value("TAPO_EMAIL"), _env_value("TAPO_PASSWORD")
+    creds = []
+    if email and pw:
+        creds.append((email, pw))
+    creds += [("test@tp-link.net", "test"), ("", "")]   # plugs not (yet) bound to an account
+    return creds
+
+
+class _KlapSession:
+    def __init__(self, ip: str):
+        self.ip = ip
+        self.lock = threading.Lock()
+        self.cookie = None
+        self.expires = 0.0
+
+    def _post(self, path: str, body: bytes, timeout: float = 4.0):
+        req = urllib.request.Request(f"http://{self.ip}/app/{path}", data=body, method="POST")
+        req.add_header("Content-Type", "application/octet-stream")
+        if self.cookie:
+            req.add_header("Cookie", self.cookie)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read(), r.headers.get("Set-Cookie", "")
+
+    def handshake(self) -> None:
+        local = os.urandom(16)
+        self.cookie = None
+        resp, cookie = self._post("handshake1", local)
+        m = re.search(r"TP_SESSIONID=([0-9A-Fa-f]+)", cookie or "")
+        if len(resp) != 48 or not m:
+            raise OSError("unexpected KLAP handshake1 reply")
+        self.cookie = "TP_SESSIONID=" + m.group(1)
+        remote, server_hash = resp[:16], resp[16:]
+        auth = version = None
+        for email, pw in _tapo_credentials():
+            v2 = _sha256(hashlib.sha1(email.encode()).digest() + hashlib.sha1(pw.encode()).digest())
+            if _sha256(local + remote + v2) == server_hash:
+                auth, version = v2, 2
+                break
+            v1 = hashlib.md5(hashlib.md5(email.encode()).digest() + hashlib.md5(pw.encode()).digest()).digest()
+            if _sha256(local + v1) == server_hash:
+                auth, version = v1, 1
+                break
+        if auth is None:
+            raise PermissionError("Tapo-Login fehlgeschlagen: TAPO_EMAIL/TAPO_PASSWORD in .env prüfen")
+        proof = _sha256(remote + local + auth) if version == 2 else _sha256(remote + auth)
+        self._post("handshake2", proof)
+        self.key = _sha256(b"lsk" + local + remote + auth)[:16]
+        ivf = _sha256(b"iv" + local + remote + auth)
+        self.iv, self.seq = ivf[:12], int.from_bytes(ivf[-4:], "big", signed=True)
+        self.sig = _sha256(b"ldk" + local + remote + auth)[:28]
+        self.expires = time.time() + 20 * 3600
+
+    def _request(self, payload: dict) -> dict:
+        self.seq = self.seq + 1 if self.seq < 0x7FFFFFFF else -0x80000000
+        seq_b = self.seq.to_bytes(4, "big", signed=True)
+        iv = self.iv + seq_b
+        enc = _AES.run(True, self.key, iv, json.dumps(payload).encode())
+        body = _sha256(self.sig + seq_b + enc) + enc
+        resp, _ = self._post(f"request?seq={self.seq}", body)
+        return json.loads(_AES.run(False, self.key, iv, resp[32:]))
+
+    def call(self, method: str, params: Optional[dict] = None) -> dict:
+        payload = {"method": method}
+        if params is not None:
+            payload["params"] = params
+        with self.lock:
+            for attempt in (0, 1):
+                if not self.cookie or time.time() > self.expires:
+                    self.handshake()
+                try:
+                    res = self._request(payload)
+                except (urllib.error.HTTPError, OSError, ValueError):
+                    if attempt:
+                        raise
+                    self.cookie = None      # session gone (timeout / plug rebooted): handshake again
+                    continue
+                code = res.get("error_code", 0)
+                if code == 0:
+                    return res.get("result", {})
+                if attempt or code not in (-1012, 9999, 1002):
+                    raise OSError(f"Tapo error_code {code}")
+                self.cookie = None
+        raise OSError("Tapo request failed")
+
+
+_klap: Dict[str, _KlapSession] = {}
+
+
+def _tapo(d) -> _KlapSession:
+    with _lock:
+        s = _klap.get(d["mac"])
+        if s is None or s.ip != d["ip"]:
+            s = _klap[d["mac"]] = _KlapSession(d["ip"])
+        return s
+
+
+def _tapo_status(d) -> Dict[str, Any]:
+    r = _tapo(d).call("get_device_info")
+    mac = norm_mac(r.get("mac"))
+    if mac and mac != d["mac"]:
+        raise OSError(f"{d['ip']} is another device ({mac})")
+    return {"state": "on" if r.get("device_on") else "off", "brightness": None}
+
+
+def _tapo_set(d, on: Optional[bool] = None, brightness: Optional[int] = None) -> None:
+    if on is None:
+        on = True
+    _tapo(d).call("set_device_info", {"device_on": bool(on)})
+
+
+# ---- public API (same shapes the launcher already uses) ------------------------
+
+def _with_rediscovery(d, fn):
+    """Run fn(d); if the device doesn't answer, look for its new IP once and retry."""
+    try:
+        return fn(d)
+    except PermissionError:
+        raise
+    except Exception as first:
+        if not rediscover():
+            raise first
+        nd = _device(d["mac"])
+        if not nd or nd["ip"] == d["ip"]:
+            raise first
+        return fn(nd)
+
+
+def _status(d) -> Dict[str, Any]:
+    return _with_rediscovery(d, _wiz_status if d["kind"] == "wiz" else _tapo_status)
+
+
+def _device_type(d) -> str:
+    return "light" if d["kind"] == "wiz" else "plug"
+
+
+def display_name(d) -> str:
+    return f"{d['room']} {d['name']}".strip()
+
+
+def get_dashboard_devices(max_age: Optional[float] = None) -> List[Dict[str, Any]]:
+    """All devices with their current state, in devices.json order (cached a few seconds)."""
+    if max_age is None:
+        max_age = DASHBOARD_TTL
+    now = time.time()
+    if _cache["dash"] is not None and now - _cache["dash_at"] < max_age:
+        return _cache["dash"]
+    devices = load_devices()
+
+    def one(d):
+        try:
+            return _status(d), None
+        except Exception as e:
+            return None, str(e)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(one, devices))
+    out = []
+    for d, (st, err) in zip(devices, results):
+        out.append({
+            "id": d["mac"],
+            "name": d["name"],
+            "room": d["room"],
+            "raw_name": display_name(d),
+            "type": _device_type(d),
+            "state": st["state"] if st else "off",
+            "brightness": st["brightness"] if st else None,
+            "color": st.get("color") if st else None,
+            "online": st is not None,
+            **({"error": err} if err else {}),
+        })
+    _cache["dash"], _cache["dash_at"] = out, now
+    return out
+
+
+def invalidate_cache() -> None:
+    _cache["dash"] = None
+
+
+def set_switch(dev_id: str, state, brightness: Optional[int] = None) -> Dict[str, Any]:
+    d = _device(dev_id) if valid_id(norm_mac(dev_id)) else None
+    if not d:
+        return {"status": "error", "error": "Unbekanntes Gerät"}
+    on = str(state).lower().strip() in ("on", "an", "ein", "true", "1")
+    setter = _wiz_set if d["kind"] == "wiz" else _tapo_set
+    try:
+        _with_rediscovery(d, lambda x: setter(x, on, brightness if on else None))
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    finally:
+        invalidate_cache()
+    return {"status": "ok", "state": "on" if on else "off", "new_state": "on" if on else "off"}
+
+
+def toggle_switch(dev_id: str) -> Dict[str, Any]:
+    d = _device(dev_id) if valid_id(norm_mac(dev_id)) else None
+    if not d:
+        return {"status": "error", "error": "Unbekanntes Gerät"}
+    try:
+        cur = _status(d)["state"]
+    except Exception as e:
+        return {"status": "error", "error": f"{display_name(d)} nicht erreichbar ({e})"}
+    return set_switch(d["mac"], "off" if cur == "on" else "on")
+
+
+def _words(s: str) -> List[str]:
+    s = s.lower().replace("ß", "ss")
+    return [w for w in re.split(r"[^0-9a-zäöü]+", s) if w]
+
+
+_FILLER = {"das", "die", "der", "den", "im", "in", "licht", "lampe", "lampen", "alle", "alles", "von", "mein", "meine"}
+
+
+def find_devices(query: str) -> List[Dict[str, Any]]:
+    """Devices matching a spoken name ('Wohnzimmer', 'Bar im Wohnzimmer', 'Bett').
+
+    A room on its own means every device in that room; otherwise the best-scoring
+    device(s) win. Partial words count ('Decke' -> 'Deckenlampe').
+    """
+    q = _words(query)
+    if not q:
+        return []
+    devices = load_devices()
+    rooms = {}
+    for d in devices:
+        rooms.setdefault(d["room"].lower(), []).append(d)
+    # whole room ("Wohnzimmer", "alles im Wohnzimmer", "Licht im Büro" when the room has one light only)
+    for room, devs in rooms.items():
+        rw = _words(room)
+        rest = [w for w in q if not any(w == r or (len(w) >= 4 and r.startswith(w)) for r in rw)]
+        if len(rest) < len(q) and not [w for w in rest if w not in _FILLER]:
+            return devs
+
+    def score(d):
+        words = _words(display_name(d))
+        sc = 0
+        for w in q:
+            if w in words:
+                sc += 3
+            elif len(w) >= 3 and any(x.startswith(w) or w.startswith(x) and len(x) >= 3 for x in words):
+                sc += 2
+            elif len(w) >= 4 and any(w in x for x in words):
+                sc += 1
+            elif any(len(os.path.commonprefix([w, x])) >= 5 for x in words):   # Deckenlicht ~ Deckenlampe
+                sc += 1
+        return sc
+
+    scored = [(score(d), d) for d in devices]
+    best = max((s for s, _ in scored), default=0)
+    return [d for s, d in scored if s == best] if best > 0 else []
+
+
+if __name__ == "__main__":
+    # python3 localhome.py [status|discover|on <mac>|off <mac>|find <text>]
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if cmd == "discover":
+        print(json.dumps(rediscover(force=True), indent=1))
+    elif cmd in ("on", "off"):
+        print(set_switch(sys.argv[2], cmd))
+    elif cmd == "find":
+        print([display_name(d) for d in find_devices(" ".join(sys.argv[2:]))])
+    else:
+        for d in get_dashboard_devices(0):
+            print(f"{d['id']}  {d['type']:5}  {d['state']:3}  {'ok ' if d['online'] else 'OFF'} "
+                  f"{d['room']} / {d['name']}  {d.get('error', '')}")

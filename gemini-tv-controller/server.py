@@ -25,7 +25,7 @@ import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from tv import LGTV
 from agent import GeminiTVAgent, get_api_key, save_api_key, _env_value
-from smartthings import SmartThings
+import localhome                      # local WiZ/Tapo control (replaces the SmartThings cloud)
 
 PORT = int(os.environ.get("GEMINI_PORT", "8080"))
 BIND = os.environ.get("GEMINI_BIND", "0.0.0.0")
@@ -203,8 +203,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(LGTV.get_audio_status())
         elif path == "/api/network":
             self._send_json(LGTV.get_network_info())
-        elif path == "/api/smartthings/devices":
-            self._send_json(SmartThings.get_dashboard_devices())
+        elif path in ("/api/smarthome/devices", "/api/smartthings/devices"):   # old path kept for older launchers
+            self._send_json(localhome.get_dashboard_devices())
         elif path == "/api/weather":
             try:
                 w_url = "https://api.open-meteo.com/v1/forecast?latitude=52.5200&longitude=13.4050&current=temperature_2m,apparent_temperature,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FBerlin"
@@ -272,11 +272,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.agent.api_key = key
             self._send_json({"success": bool(key), "has_key": bool(get_api_key())})
 
-        elif path == "/api/smartthings/toggle":
+        elif path in ("/api/smarthome/toggle", "/api/smartthings/toggle", "/api/smarthome/set"):
             dev_id = req_data.get("deviceId") or req_data.get("id") or ""
             if not isinstance(dev_id, str) or not _DEVICE_ID.match(dev_id):
                 return self._send_json({"error": "Missing or invalid deviceId"}, 400)
-            self._send_json(SmartThings.toggle_switch(dev_id))
+            if path == "/api/smarthome/set":
+                bri = req_data.get("brightness")
+                bri = int(bri) if isinstance(bri, (int, float)) and not isinstance(bri, bool) else None
+                return self._send_json(localhome.set_switch(dev_id, req_data.get("state", "on"), bri))
+            self._send_json(localhome.toggle_switch(dev_id))
 
         elif path == "/api/picture/mode":
             self._send_json(LGTV.set_picture_mode(str(req_data.get("mode", "game"))))
@@ -304,8 +308,6 @@ class ThreadingServer(socketserver.ThreadingMixIn, HTTPServer):
 
 
 def run_server():
-    import st_oauth
-    st_oauth.start_keepalive()          # keeps the SmartThings OAuth tokens fresh (no-op until set up)
     httpd = ThreadingServer((BIND, PORT), RequestHandler)
     print(f"Modern LG Hub Backend running on {BIND}:{PORT}")
     try:

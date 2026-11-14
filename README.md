@@ -25,7 +25,7 @@ Designed for pure speed, zero bloat, elegant dark aesthetics, and seamless hardw
 - **💡 Smart Home Dashboard & Management**
   - Integrated smart device tiles with live status indicators (lights, smart plugs).
   - Interactive **Smart Home Manager**: reorder, swap, or toggle visible smart home devices directly from your remote.
-  - Direct integration with local controller APIs and SmartThings.
+  - Direct integration with local controller APIs; smart home (WiZ bulbs, Tapo plugs) controlled locally over the LAN, no cloud.
 
 - **🤖 Local Gemini AI TV Assistant**
   - Built-in Gemini voice/text assistant modal for smart TV commands, media searches, and automations.
@@ -53,7 +53,9 @@ modern-lg-hub/
 └── gemini-tv-controller/        # Local Python REST backend & AI assistant
     ├── server.py                # Fast REST API (port 8080) for TV & Smart Home actions
     ├── tv.py                    # Local Luna bus TV controller (power, apps, screen off)
-    └── smartthings.py           # Smart Home device integration
+    ├── localhome.py             # Local smart home control (WiZ UDP, Tapo KLAP), replaces SmartThings
+    ├── devices.json             # Smart home devices (MAC, room, name)
+    └── smartthings.py           # Old SmartThings cloud client (unused)
 ```
 
 ---
