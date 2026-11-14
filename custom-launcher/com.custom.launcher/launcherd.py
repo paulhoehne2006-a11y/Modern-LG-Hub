@@ -52,6 +52,13 @@ REFRESH_LOCK = '/tmp/custom-launcher.refresh.lock'
 REPRESS_AFTER = 1.5          # a 'launch' of LG home this long after the pass = HOME pressed again
 ALLOW_MAX = 600              # LG home opened on purpose is given back to the launcher after this long
 WATCHDOG_SECONDS = 30        # safety net: poll the foreground app (also detects a restarted app manager)
+GUARD_SECONDS = 300          # how often defaultApps.home is checked (see guard_default_home)
+# Background apps closed to free memory (owner's choice 2026-11-14). Netflix, YouTube, Spotify,
+# Prime Video, AirPlay and LG home are deliberately NOT in this list.
+TRIM_APPS = ('com.webos.app.lgchannels', 'com.webos.app.browser', 'amazon.alexapr', 'com.webos.app.hdmi2')
+TRIM_SECONDS = 120           # how often to trim while the launcher is in front
+TRIM_RELAUNCH_WINDOW = 600   # back again within 10 min after closing = the system wants it running
+TRIM_BACKOFF = 3600          # then leave that app alone for an hour
 SAM = 'luna://com.webos.applicationManager/'
 SYSLOG = '/var/log/messages'
 VOICE_DEBOUNCE = 0.6         # one mic press can be logged more than once
@@ -59,7 +66,9 @@ VOICE_DEBOUNCE = 0.6         # one mic press can be logged more than once
 EXTRA_IDS = ('com.webos.app.hdmi1', 'com.webos.app.hdmi2', 'com.webos.app.hdmi3',
              'com.webos.app.hdmi4', 'com.webos.app.livetv', 'com.palm.app.settings')
 ICON_KEYS = ('extraLargeIcon', 'largeIcon', 'mediumLargeIcon', 'icon')   # best first
-BURST = (0.0, 0.045, 0.09, 0.135, 0.18, 0.24)   # seconds after LG home's "launch" event
+# Re-raise the launcher this long after LG home's "launch" event: its card shows up ~0.25 s
+# after the launch (measured), so retries before that only add load.
+BURST = (0.0, 0.25, 0.45)
 USAGE_PERSIST = '/var/lib/webosbrew/custom-launcher-usage.json'   # survives reinstalling the app
 USAGE_HALF_LIFE = 45 * 86400        # a launch counts half as much after 45 days
 USAGE_FLUSH_DELAY = 5.0             # seconds; batches writes, keeps the order fresh when returning home
@@ -142,9 +151,11 @@ def luna_call(uri, params=None, timeout=20):
 def luna_fire(uri, params):
     """Send a request without waiting for the reply (fast path for redirects)."""
     try:
+        # close_fds=False lets Python use posix_spawn (half the spawn cost, measured on the TV).
+        # Safe: Python creates all its descriptors (pipes, sockets) non-inheritable anyway.
         _children.append((subprocess.Popen(['luna-send', '-n', '1', uri, json.dumps(params)],
                                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                           stderr=subprocess.DEVNULL, close_fds=True), time.monotonic()))
+                                           stderr=subprocess.DEVNULL, close_fds=False), time.monotonic()))
     except OSError as e:
         log('luna_fire failed: %s' % e)
 
@@ -429,6 +440,10 @@ class State:
     started = 0.0
     quiet = 0.0
 
+    def __init__(self):
+        self.trim_closed_at = {}     # app id -> monotonic time we last closed it
+        self.trim_skip_until = {}    # app id -> monotonic time until which we leave it alone
+
 
 def paused():
     # off switch, or the app was uninstalled (then redirecting would lead nowhere)
@@ -452,11 +467,18 @@ def take_pass():
         return False
 
 
-def launch_launcher():
+def launch_launcher(close_home=True):
+    """Bring the launcher to the front (and close LG home).
+
+    Every call spawns luna-send processes; under memory pressure a burst of them (it used to
+    be 18 at once) stalls for ~0.6 s, exactly the window in which LG home's own card pops up
+    over the launcher. So: as few processes as possible, and closing LG home only once its
+    window exists (foreground event), not on its 'launch' event.
+    """
     # explicit params, so a mic button's {'gemini': ...} never lingers in PalmSystem.launchParams
     luna_fire(SAM + 'launch', {'id': APP_ID, 'params': {'reason': 'home'}})
-    luna_fire(SAM + 'closeByAppId', {'id': LG_HOME})
-    luna_fire('luna://com.webos.surfacemanager/closeByAppId', {'id': LG_HOME})
+    if close_home:
+        luna_fire(SAM + 'closeByAppId', {'id': LG_HOME})
 
 
 def on_life_event(st, ev):
@@ -487,11 +509,12 @@ def on_life_event(st, ev):
                 log('LG home allowed once (pass flag)')
                 return
             log('intercept: LG home %s -> redirecting to %s' % (event, APP_ID))
-            launch_launcher()
             if event == 'launch':
+                launch_launcher(close_home=False)      # LG home has no window yet: nothing to close
                 st.burst = [now + d for d in BURST if d > 0]
             else:
-                st.burst = [now + 0.08, now + 0.2]
+                launch_launcher()
+                st.burst = [now + 0.15]
             st.nag_left, st.nag_at = 5, now + 0.8
         elif event in ('background', 'stop', 'close'):
             st.home_front = False
@@ -579,6 +602,78 @@ def wait_for_sam(st, seconds=180):
     return False
 
 
+def guard_default_home():
+    """Undo general.defaultApps.home = <anything>.
+
+    With that setting webOS stops launching LG home on the Home key and tries to show the
+    configured app as its home window instead, which fails for this launcher: the Home key
+    then does nothing at all (seen twice). Our redirect needs LG home to be launched.
+    """
+    try:
+        reply = luna_call('luna://com.webos.settingsservice/getSystemSettings',
+                          {'category': 'general', 'keys': ['defaultApps']}, timeout=6)
+        apps = (reply.get('settings') or {}).get('defaultApps')
+        if isinstance(apps, dict) and 'home' in apps:
+            fixed = dict((k, v) for k, v in apps.items() if k != 'home')
+            luna_call('luna://com.webos.settingsservice/setSystemSettings',
+                      {'category': 'general', 'settings': {'defaultApps': fixed}}, timeout=6)
+            log('removed defaultApps.home=%s (it disables the Home key)' % apps.get('home'))
+    except Exception as e:
+        log('defaultApps check failed: %r' % (e,))
+
+
+def ensure_keep_alive():
+    """Put the launcher into SAM's keepAliveApps (runtime config via configd).
+
+    Without it webOS drops the launcher's web process under memory pressure while another
+    app is open; returning home then cold-starts it (~4.8 s instead of ~0.2 s, measured).
+    configd's setConfigs is in-memory only, so this runs at every daemon start and is
+    re-checked periodically (configd or a reboot reset it). SAM subscribes to configd.
+    """
+    key = 'com.webos.applicationManager.keepAliveApps'
+    try:
+        reply = luna_call('luna://com.webos.service.config/getConfigs', {'configNames': [key]}, timeout=6)
+        apps = (reply.get('configs') or {}).get(key)
+        if isinstance(apps, list) and APP_ID not in apps:
+            res = luna_call('luna://com.webos.service.config/setConfigs',
+                            {'configs': {key: apps + [APP_ID]}}, timeout=6)
+            log('keepAliveApps += %s: %s' % (APP_ID, 'ok' if res.get('returnValue') else res))
+    except Exception as e:
+        log('keepAlive check failed: %r' % (e,))
+
+
+def trim_background(st):
+    """Close rarely used background apps (owner's choice) to leave memory for the launcher.
+
+    Only while the launcher is in front. An app the system brings straight back (preload
+    manager, keep-alive) is left alone for an hour instead of fighting over it.
+    """
+    if st.last_fg != APP_ID or paused():
+        return
+    try:
+        reply = luna_call(SAM + 'running', {}, timeout=6)
+    except Exception as e:
+        log('trim: running failed: %r' % (e,))
+        return
+    now = time.monotonic()
+    running = set(a.get('id') for a in reply.get('running', []) if isinstance(a, dict))
+    closed = []
+    for app in TRIM_APPS:
+        if app not in running or app == st.last_fg:
+            continue
+        if now < st.trim_skip_until.get(app, 0.0):
+            continue
+        if now - st.trim_closed_at.get(app, -1e9) < TRIM_RELAUNCH_WINDOW:
+            st.trim_skip_until[app] = now + TRIM_BACKOFF
+            log('trim: %s came back right away, leaving it for %d min' % (app, TRIM_BACKOFF // 60))
+            continue
+        luna_fire(SAM + 'closeByAppId', {'id': app})
+        st.trim_closed_at[app] = now
+        closed.append(app)
+    if closed:
+        log('trim: closed %s' % ', '.join(closed))
+
+
 def watchdog(st, subs):
     """Cheap safety net: catches missed events and an application manager that restarted."""
     try:
@@ -663,6 +758,8 @@ def daemon(boot):
     if first == 'retry':
         refresh_at = mono + 10 if not refresh_at else min(refresh_at, mono + 10)
     watch_at = mono + 1.0
+    guard_at = mono + 2.0                             # defaultApps + keepAlive: soon after start, then every 5 min
+    trim_at = mono + (BOOT_QUIET if boot else 20.0)   # never trim while the TV is still booting
     first_applist = True
 
     while not st.stop:
@@ -685,8 +782,9 @@ def daemon(boot):
             # timers
             while st.burst and st.burst[0] <= now:
                 st.burst.pop(0)
-                if redirect_wanted(st):
-                    launch_launcher()
+                # only while something else (typically LG home's late card) is in front
+                if redirect_wanted(st) and (st.home_front or st.last_fg != APP_ID):
+                    launch_launcher(close_home=st.home_front)
             if st.allow_home and now - st.allow_since > ALLOW_MAX:
                 st.allow_home = False
                 log('LG home pass expired')
@@ -706,6 +804,14 @@ def daemon(boot):
             if now >= watch_at:
                 watch_at = now + WATCHDOG_SECONDS
                 watchdog(st, subs)
+            if now >= guard_at:
+                guard_at = now + GUARD_SECONDS
+                if not paused():
+                    guard_default_home()
+                    ensure_keep_alive()
+            if now >= trim_at:
+                trim_at = now + TRIM_SECONDS
+                trim_background(st)
             reap_children()
 
             now = time.monotonic()
