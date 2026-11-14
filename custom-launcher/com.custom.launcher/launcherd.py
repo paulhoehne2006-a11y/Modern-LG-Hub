@@ -69,6 +69,7 @@ ICON_KEYS = ('extraLargeIcon', 'largeIcon', 'mediumLargeIcon', 'icon')   # best 
 # Re-raise the launcher this long after LG home's "launch" event: its card shows up ~0.25 s
 # after the launch (measured), so retries before that only add load.
 BURST = (0.0, 0.25, 0.45)
+MEMMGR_KEEPALIVE = 'com.webos.memorymanager.KeepAlive'   # memchute's own list (see ensure_memchute_keep_alive)
 USAGE_PERSIST = '/var/lib/webosbrew/custom-launcher-usage.json'   # survives reinstalling the app
 USAGE_HALF_LIFE = 45 * 86400        # a launch counts half as much after 45 days
 USAGE_FLUSH_DELAY = 5.0             # seconds; batches writes, keeps the order fresh when returning home
@@ -630,16 +631,44 @@ def ensure_keep_alive():
     configd's setConfigs is in-memory only, so this runs at every daemon start and is
     re-checked periodically (configd or a reboot reset it). SAM subscribes to configd.
     """
-    key = 'com.webos.applicationManager.keepAliveApps'
+    for key in ('com.webos.applicationManager.keepAliveApps', MEMMGR_KEEPALIVE):
+        try:
+            reply = luna_call('luna://com.webos.service.config/getConfigs', {'configNames': [key]}, timeout=6)
+            apps = (reply.get('configs') or {}).get(key)
+            if isinstance(apps, list) and APP_ID not in apps:
+                res = luna_call('luna://com.webos.service.config/setConfigs',
+                                {'configs': {key: apps + [APP_ID]}}, timeout=6)
+                log('%s += %s: %s' % (key, APP_ID, 'ok' if res.get('returnValue') else res))
+        except Exception as e:
+            log('keepAlive check failed (%s): %r' % (key, e))
+    ensure_memchute_keep_alive()
+
+
+_memchute_restarted = False
+
+
+def ensure_memchute_keep_alive():
+    """Make LG's memory manager (memchute) spare the launcher.
+
+    memchute kills background web apps under memory pressure by priority group, and it has
+    its own keep-alive list (configd com.webos.memorymanager.KeepAlive), separate from SAM's.
+    Without it the launcher's renderer was killed while Spotify was open and Home showed a
+    spinner for ~3 s (cold start). memchute reads that list only when it starts, so after
+    adding us to configd it needs one restart (it rebuilds its app list from SAM; tested).
+    Only once per daemon run, so a memchute that ignores the list cannot cause a loop.
+    """
+    global _memchute_restarted
     try:
-        reply = luna_call('luna://com.webos.service.config/getConfigs', {'configNames': [key]}, timeout=6)
-        apps = (reply.get('configs') or {}).get(key)
-        if isinstance(apps, list) and APP_ID not in apps:
-            res = luna_call('luna://com.webos.service.config/setConfigs',
-                            {'configs': {key: apps + [APP_ID]}}, timeout=6)
-            log('keepAliveApps += %s: %s' % (APP_ID, 'ok' if res.get('returnValue') else res))
+        live = luna_call('luna://com.webos.memorymanager/getConfigs', {}, timeout=6).get('KeepAlive')
     except Exception as e:
-        log('keepAlive check failed: %r' % (e,))
+        log('memchute check failed: %r' % (e,))
+        return
+    if not isinstance(live, list) or APP_ID in live or _memchute_restarted:
+        return
+    _memchute_restarted = True
+    rc = subprocess.call(['systemctl', 'restart', 'memchute'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log('memchute restarted to load its keep-alive list (rc=%s)' % rc)
 
 
 def trim_background(st):

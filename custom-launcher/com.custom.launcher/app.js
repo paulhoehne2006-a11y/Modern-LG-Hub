@@ -1197,7 +1197,6 @@
     const now = Date.now();
     if (now - lastShown < 1000) return;
     lastShown = now;
-    activateApp();
     resetKeys();
     restoreView();
     wake();
@@ -1209,6 +1208,10 @@
   // A plain return from an app (Back) keeps the focused card.
   let lastRelaunch = 0;
   function onRelaunch(e) {
+    // With handlesRelaunch the app has to raise its own window, on EVERY relaunch: LG home's
+    // late card can push the launcher back right after the first one, and launcherd's follow-up
+    // launches are then the only way back. (Debouncing this left the TV with no app in front.)
+    activateApp();
     const now = Date.now();
     if (now - lastRelaunch < 300) return;   // fired on both document and window
     lastRelaunch = now;

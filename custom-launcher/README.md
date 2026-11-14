@@ -7,7 +7,7 @@ TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@192.168.178
 | Pfad | Was |
 |---|---|
 | `com.custom.launcher/` | **Die App** (Quelltext). `index.html`, `style.css`, `app.js` = Oberfläche; `launcherd.py` = Root-Hilfsdienst; `appinfo.json`, `icon.png`; `data/` nur Vorschau-Daten für den PC |
-| `com.custom.launcher_<version>_all.ipk` | Installationspaket, wird von `build-ipk.sh` erzeugt (nicht im Git). Aktuelle Version steht in `com.custom.launcher/appinfo.json` (3.2.9) |
+| `com.custom.launcher_<version>_all.ipk` | Installationspaket, wird von `build-ipk.sh` erzeugt (nicht im Git). Aktuelle Version steht in `com.custom.launcher/appinfo.json` (3.3.1) |
 | `../gemini-tv-controller/` | Backend auf dem TV (`server.py`, Port 8080, nur `127.0.0.1`): Gemini-Assistent, SmartThings-Kacheln, Wetter, OLED-aus |
 | `audit/review.md`, `audit/qa.md` | Code-Review und TV-Test der Agents (Fehlerlisten, alle wichtigen behoben) |
 | `boot/99-custom-launcher` | Boot-Hook, wird auf dem TV nach `/var/lib/webosbrew/init.d/` kopiert |
@@ -38,6 +38,8 @@ Auf dem TV liegt:
    - **Home-Taste**: webOS verarbeitet sie selbst (`homeAutoLaunch` bleibt an, sonst reagiert die Fernbedienung nicht). `launcherd.py` leitet LG-Home sofort auf den Launcher um; der Launcher bekommt dann `webOSRelaunch` und springt nach oben. Zurück aus einer App behält die Position.
    - **Achtung**: Niemals `defaultApps.home` (Kategorie `general`) auf `com.custom.launcher` setzen. Dann startet webOS bei Home gar nichts mehr (Home-Taste tot, auch nach Neustart). Richtiger Wert: `{"MembershipApp":"com.webos.app.overlaymembership"}` ohne `home`.
    - **Absicherung**: Der Boot-Hook startet `launcherd.py` neu, falls der Dienst abstürzt (Prüfung jede Minute), und schreibt ins Log, wenn `python3` fehlt. Pausieren deshalb über die `.off`-Datei, nicht über `launcherd.py stop`.
+   - **Schnelle Rückkehr**: `launcherd.py` trägt den Launcher in zwei Keep-Alive-Listen ein (configd, nur im RAM, wird bei jedem Start erneut gesetzt): `com.webos.applicationManager.keepAliveApps` (SAM) und `com.webos.memorymanager.KeepAlive` (LGs Speicher-Manager `memchute`, der sonst unter Last den Launcher-Renderer beendet, z. B. bei offenem Spotify; Rückkehr dann ~3 s mit Ladekreis). memchute liest seine Liste nur beim Start, deshalb startet `launcherd.py` ihn einmal neu, wenn der Eintrag fehlt.
+   - **Fenster nach vorn**: Mit `handlesRelaunch` muss die App ihr Fenster bei jedem `webOSRelaunch` selbst holen (`PalmSystem.activate()`), nie entprellt. Sonst bleibt nach Home kurz LG-Home und danach gar keine App im Vordergrund.
 
 ## Bedienung / Notausstieg
 
