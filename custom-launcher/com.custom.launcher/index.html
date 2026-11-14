@@ -7,78 +7,53 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- soft light in the colour of the focused app; everything else stays true black -->
-  <div id="ambient" aria-hidden="true"><div class="amb"></div><div class="amb"></div></div>
-
   <div id="shift"><!-- moved by a few pixels periodically (OLED care) -->
-    <div id="page">
-      <header id="hero">
-        <div id="hero-left">
-          <div id="clock"><span id="hh">--</span><span id="colon">:</span><span id="mm">--</span></div>
-          <div id="date">--</div>
-        </div>
+    <div id="page"><!-- fades/zooms when an app starts -->
 
-        <div id="hero-center">
-          <div id="weather" class="glass-pill" role="button" tabindex="0" aria-label="WetterOnline öffnen">
-            <span id="w-icon">⛅</span>
-            <div id="w-details">
-              <div id="w-main"><span id="w-temp">--°C</span> <span id="w-city">Musterstadt</span></div>
-              <div id="w-sub">Lade Wetter...</div>
+      <!-- rows (Zuletzt & Favoriten, Smart Home, categories); built by app.js, slide up under the billboard -->
+      <div id="rows"><div id="scroller"></div></div>
+
+      <!-- fixed top: clock, pills and the billboard describing the focused card -->
+      <div id="fixed">
+        <header id="topbar" class="reveal" style="--d: 0ms">
+          <div id="clockbox">
+            <div id="clock"><span id="hh">--</span><span id="colon">:</span><span id="mm">--</span></div>
+            <div id="date">--</div>
+          </div>
+          <div id="pills">
+            <div id="weather" class="pill" role="button" aria-label="Wetter">
+              <span class="pill-icon" id="w-icon"></span>
+              <span class="pill-text"><span class="pill-title" id="w-temp">--°</span><span class="pill-sub" id="w-sub">Musterstadt</span></span>
+            </div>
+            <div id="gemini-badge" class="pill gemini" role="button" aria-label="Gemini KI-Assistent">
+              <span class="pill-icon" id="g-icon"></span>
+              <span class="pill-text"><span class="pill-title">Gemini</span><span class="pill-sub">Fragen &amp; Steuern</span></span>
+            </div>
+            <div id="audio-badge" class="pill audio" role="button" aria-label="Audioausgabe">
+              <span class="pill-icon" id="audio-icon"></span>
+              <span class="pill-text"><span class="pill-title" id="audio-title">Audio</span><span class="pill-sub" id="audio-sub">Ausgabe</span></span>
             </div>
           </div>
-
-          <div id="gemini-badge" class="glass-pill gemini-pill" role="button" tabindex="0" aria-label="Gemini KI-Assistent öffnen">
-            <span class="gemini-icon">✨</span>
-            <div class="gemini-details">
-              <div class="gemini-title">Gemini KI</div>
-              <div class="gemini-sub">Fragen & Steuern</div>
+        </header>
+        <section id="billboard" class="reveal" style="--d: 60ms" aria-live="polite">
+          <div id="bb-content">
+            <div id="bb-text">
+              <div id="bb-kicker"></div>
+              <div id="bb-title"></div>
+              <div id="bb-desc"></div>
+              <div id="bb-keys"></div>
             </div>
+            <div id="bb-logo"><img alt="" draggable="false"><span class="bb-icon"></span></div>
           </div>
-        </div>
-
-        <div id="hero-right">
-          <div id="audio-badge" class="glass-pill audio-pill denon-avr" role="button" tabindex="0" aria-label="Audioausgabe Einstellungen">
-            <div class="audio-icon" id="audio-icon">🔊</div>
-            <div class="audio-details">
-              <div class="audio-title" id="audio-title">Denon AVR-1803</div>
-              <div class="audio-sub" id="audio-sub">Optischer Digitalausgang</div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- Section: Smart Home & Denon Audio Mode -->
-      <div class="section-header">
-        <div class="section-title-wrap">
-          <span class="section-title">Smart Home & Audio</span>
-          <span class="section-sub">SmartThings & Denon AVR</span>
-        </div>
-        <span class="section-hint">OK lang drücken zum Anpassen</span>
+        </section>
       </div>
-      <section id="smarthome" class="cards" aria-label="Smart Home"></section>
-
-      <!-- Section: Top Apps & Inputs -->
-      <div class="section-header">
-        <div class="section-title-wrap">
-          <span class="section-title">Favoriten & Eingänge</span>
-          <span class="section-sub">Nach Nutzung sortiert</span>
-        </div>
-      </div>
-      <section id="dock" class="cards" aria-label="Favoriten"></section>
-
-      <!-- Section: All Apps -->
-      <div class="section-header">
-        <div class="section-title-wrap">
-          <span class="section-title">Alle Apps</span>
-        </div>
-      </div>
-      <section id="grid" class="cards" aria-label="Apps"></section>
+      <div id="fixed-fade" aria-hidden="true"></div>
     </div>
   </div>
 
   <div id="scrim" aria-hidden="true"></div>
   <div id="menu" role="dialog" aria-modal="true" hidden>
-    <div id="menu-head"><div id="menu-icon"></div><div id="menu-title"></div></div>
+    <div id="menu-head"><div id="menu-icon"></div><div id="menu-titles"><div id="menu-title"></div><div id="menu-sub"></div></div></div>
     <div id="menu-clip"><div id="menu-list" role="menu"></div></div>
     <div id="menu-hint"></div>
   </div>
