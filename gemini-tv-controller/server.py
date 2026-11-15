@@ -279,7 +279,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             if path == "/api/smarthome/set":
                 bri = req_data.get("brightness")
                 bri = int(bri) if isinstance(bri, (int, float)) and not isinstance(bri, bool) else None
-                return self._send_json(localhome.set_switch(dev_id, req_data.get("state", "on"), bri))
+                color = localhome.parse_color(req_data.get("color")) if req_data.get("color") else None
+                if req_data.get("color") and color is None:
+                    return self._send_json({"error": "Invalid color (expected #rrggbb)"}, 400)
+                kelvin = req_data.get("kelvin")
+                kelvin = int(kelvin) if isinstance(kelvin, (int, float)) and not isinstance(kelvin, bool) else None
+                return self._send_json(localhome.set_switch(dev_id, req_data.get("state", "on"), bri, color, kelvin))
             self._send_json(localhome.toggle_switch(dev_id))
 
         elif path == "/api/picture/mode":

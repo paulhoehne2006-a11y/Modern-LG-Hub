@@ -36,7 +36,9 @@ REDISCOVER_EVERY = 60.0     # s; at most one LAN rediscovery per minute
 
 _MAC_RE = re.compile(r"^[0-9a-f]{12}$")
 _lock = threading.Lock()
-_cache: Dict[str, Any] = {"dash": None, "dash_at": 0.0, "discovered_at": 0.0}
+_cache: Dict[str, Any] = {"dash": None, "dash_at": 0.0, "discovered_at": 0.0, "caps": {}}
+_HEX_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
+KELVIN_MIN, KELVIN_MAX = 2200, 6500     # white range every WiZ white/colour bulb accepts
 
 
 def norm_mac(mac: str) -> str:
@@ -230,17 +232,57 @@ def _wiz_color(r: dict) -> str:
     return "#%02x%02x%02x" % rgb
 
 
+def _wiz_caps(d) -> List[str]:
+    """What a WiZ bulb can do, from its module name (…SHRGB… colour, …SHTW… tunable white, …SHDW… dim only).
+
+    Asked once per bulb and cached; unknown modules are treated as full colour bulbs."""
+    caps = _cache["caps"].get(d["mac"])
+    if caps is None:
+        name = str(_wiz_call(d["ip"], "getSystemConfig", tries=2).get("moduleName") or "").upper()
+        if "RGB" in name or not name:
+            caps = ["brightness", "color", "white"]
+        elif "TW" in name:
+            caps = ["brightness", "white"]
+        else:
+            caps = ["brightness"]
+        _cache["caps"][d["mac"]] = caps
+    return caps
+
+
 def _wiz_status(d) -> Dict[str, Any]:
     r = _wiz_call(d["ip"], "getPilot")
-    return {"state": "on" if r.get("state") else "off", "brightness": r.get("dimming"), "color": _wiz_color(r)}
+    out = {"state": "on" if r.get("state") else "off", "brightness": r.get("dimming"), "color": _wiz_color(r)}
+    if isinstance(r.get("temp"), (int, float)) and r["temp"]:
+        out["kelvin"] = int(r["temp"])
+    try:
+        out["capabilities"] = _wiz_caps(d)
+    except Exception:
+        out["capabilities"] = ["brightness", "color", "white"]
+    return out
 
 
-def _wiz_set(d, on: Optional[bool] = None, brightness: Optional[int] = None) -> None:
+def parse_color(value) -> Optional[tuple]:
+    """'#ff8800' / 'ff8800' -> (255, 136, 0); anything else -> None."""
+    m = _HEX_RE.match(str(value or "").strip())
+    if not m:
+        return None
+    h = m.group(1)
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _wiz_set(d, on: Optional[bool] = None, brightness: Optional[int] = None,
+             color: Optional[tuple] = None, kelvin: Optional[int] = None) -> None:
     params: Dict[str, Any] = {}
     if on is not None:
         params["state"] = bool(on)
     if brightness is not None:
         params["dimming"] = max(10, min(100, int(brightness)))   # WiZ accepts 10..100
+        params.setdefault("state", True)
+    if color is not None:
+        params["r"], params["g"], params["b"] = (max(0, min(255, int(c))) for c in color)
+        params.setdefault("state", True)
+    elif kelvin is not None:
+        params["temp"] = max(KELVIN_MIN, min(KELVIN_MAX, int(kelvin)))
         params.setdefault("state", True)
     _wiz_call(d["ip"], "setPilot", params)
 
@@ -410,10 +452,11 @@ def _tapo_status(d) -> Dict[str, Any]:
     mac = norm_mac(r.get("mac"))
     if mac and mac != d["mac"]:
         raise OSError(f"{d['ip']} is another device ({mac})")
-    return {"state": "on" if r.get("device_on") else "off", "brightness": None}
+    return {"state": "on" if r.get("device_on") else "off", "brightness": None, "capabilities": []}
 
 
-def _tapo_set(d, on: Optional[bool] = None, brightness: Optional[int] = None) -> None:
+def _tapo_set(d, on: Optional[bool] = None, brightness: Optional[int] = None,
+              color: Optional[tuple] = None, kelvin: Optional[int] = None) -> None:
     if on is None:
         on = True
     _tapo(d).call("set_device_info", {"device_on": bool(on)})
@@ -476,6 +519,8 @@ def get_dashboard_devices(max_age: Optional[float] = None) -> List[Dict[str, Any
             "state": st["state"] if st else "off",
             "brightness": st["brightness"] if st else None,
             "color": st.get("color") if st else None,
+            "kelvin": st.get("kelvin") if st else None,
+            "capabilities": st.get("capabilities", []) if st else [],
             "online": st is not None,
             **({"error": err} if err else {}),
         })
@@ -487,14 +532,17 @@ def invalidate_cache() -> None:
     _cache["dash"] = None
 
 
-def set_switch(dev_id: str, state, brightness: Optional[int] = None) -> Dict[str, Any]:
+def set_switch(dev_id: str, state, brightness: Optional[int] = None,
+               color: Optional[tuple] = None, kelvin: Optional[int] = None) -> Dict[str, Any]:
+    """Switch a device; for WiZ bulbs optionally also brightness, an RGB colour or a white tone (kelvin)."""
     d = _device(dev_id) if valid_id(norm_mac(dev_id)) else None
     if not d:
         return {"status": "error", "error": "Unbekanntes Gerät"}
     on = str(state).lower().strip() in ("on", "an", "ein", "true", "1")
     setter = _wiz_set if d["kind"] == "wiz" else _tapo_set
     try:
-        _with_rediscovery(d, lambda x: setter(x, on, brightness if on else None))
+        _with_rediscovery(d, lambda x: setter(x, on, brightness if on else None,
+                                              color if on else None, kelvin if on else None))
     except Exception as e:
         return {"status": "error", "error": str(e)}
     finally:
