@@ -41,7 +41,8 @@
   const SCREENSAVER_MS = 240000;   // pure black screensaver after 4 min without input
   const SHIFT_MS = 90000;          // pixel shift interval (OLED care)
   const VIEW_W = 1920, SIDE = 96;
-  const BB_REST_MS = 170;          // billboard follows the focus once it rests this long
+  const BB_REST_MS = 300;          // billboard text + colour light follow the focus once it rests this long (cards move .4 s;
+                                   // repainting the light while they still move costs frames)
 
   // app categories (rows); anything unknown lands in "Weitere Apps"
   const CATEGORIES = [
@@ -118,7 +119,7 @@
   const scrollerEl = $('scroller');
   const weatherEl = $('weather'), geminiBadgeEl = $('gemini-badge'), audioBadgeEl = $('audio-badge');
   const PILLS = [['hero:weather', weatherEl], ['hero:gemini', geminiBadgeEl], ['hero:audio', audioBadgeEl]];
-  const bbEl = $('bb-content'), bbLogo = $('bb-logo'), fixedEl = $('fixed');
+  const bbEl = $('bb-content'), bbLogo = $('bb-logo'), glowEls = ['glow-top', 'fixed-fade', 'glow-low'].map($);   // the three small static areas painting the colour light (never #page: all cards would restyle)
 
   /* ------------------------------------------------------------------ */
   /* Luna bus                                                            */
@@ -775,7 +776,7 @@
       scrollToRow(pos.r, opts.instant);
     }
     if (opts.instant || !bbKey) { showBillboard(key, false); scheduleGlow(true); }
-    else { scheduleBillboard(key); scheduleGlow(); }   // every key press postpones the colour change
+    else scheduleBillboard(key);   // the colour light changes together with the billboard text (fillBillboard)
   }
 
   // the focused card grows; its neighbours move aside; long rows slide so the focus stays left
@@ -836,7 +837,9 @@
     } else {
       let r = pos.r + (dir === 'up' ? -1 : 1);
       while (r >= 0 && r < nr.length && !nr[r].keys.length) r += dir === 'up' ? -1 : 1;
-      if (r >= 0 && r < nr.length) {
+      if (r >= 0 && r < nr.length && pos.row.type === 'pills') {
+        target = nr[r].keys[0];   // down from the top bar always starts at the first card, left
+      } else if (r >= 0 && r < nr.length) {
         const x = visualX(pos.r, pos.c);
         let best = 0, bd = Infinity;
         nr[r].keys.forEach((k, c) => { const d = Math.abs(visualX(r, c) - x); if (d < bd) { bd = d; best = c; } });
@@ -950,12 +953,12 @@
       const html = info.iconHtml || svg(info.icon);
       if (ic.dataset.html !== html) { ic.innerHTML = html; ic.dataset.html = html; }
     }
-    scheduleGlow();
+    scheduleGlow(true);   // colour light changes together with the text (it used to wait 650 ms: felt late)
   }
 
-  // The colour light is painted into the top layer's background. Repainting that large gradient takes
-  // the TV a frame or two (measured: p95 33 ms instead of 17 ms while navigating), so it only changes
-  // once everything has stopped moving (focus animations take ~0.45 s).
+  // The colour light is painted into static backgrounds (#page, #fixed, #fixed-fade), never into a layer
+  // that moves. Repainting it costs the TV a frame or two, so it changes only once per billboard swap
+  // (when the text is faded out), not on every key press.
   const GLOW_REST_MS = 650;
   let glowTimer = 0;
   function scheduleGlow(now) {
@@ -968,9 +971,8 @@
     if (!info) return;
     const c = toRgb(info.glow), a = isMuted(info.glow) ? 0.22 : 0.55;
     const g1 = 'rgba(' + c + ',' + a + ')', g2 = 'rgba(' + c + ',' + (a * 0.38).toFixed(3) + ')';
-    if (fixedEl.style.getPropertyValue('--g1') !== g1) {   // only repaint if the colour really changed
-      fixedEl.style.setProperty('--g1', g1);
-      fixedEl.style.setProperty('--g2', g2);
+    if (glowEls[0].style.getPropertyValue('--g1') !== g1) {   // only repaint if the colour really changed
+      for (const el of glowEls) { el.style.setProperty('--g1', g1); el.style.setProperty('--g2', g2); }
     }
   }
 
@@ -1795,6 +1797,8 @@
     // late card can push the launcher back right after the first one, and launcherd's follow-up
     // launches are then the only way back. (Debouncing this left the TV with no app in front.)
     activateApp();
+    // the focus watchdog relaunched us: only take the focus, keep the view (launchParams can be stale, hence the time window)
+    if (launchParams(e).refocus && refocusUntil > Date.now()) return;
     const now = Date.now();
     if (now - lastRelaunch < 300) return;   // fired on both document and window
     lastRelaunch = now;
@@ -1832,19 +1836,49 @@
   window.addEventListener('focus', () => {
     // gained without a show/relaunch just before it: most likely a key press that was swallowed
     const quiet = Date.now() - Math.max(lastShowAt, lastRelaunch) > 1500;
-    flog('focus' + (quiet && !document.hidden ? ' (by key?)' : ''));
+    flog('focus t=' + Math.round(performance.now()) + (quiet && !document.hidden ? ' (by key?)' : ''));
   });
   document.addEventListener('visibilitychange', () => { lastShowAt = Date.now(); flog('vis ' + document.visibilityState); });
-  flog('start hasFocus=' + document.hasFocus());
+  flog('start hasFocus=' + document.hasFocus() + ' t=' + Math.round(performance.now()));
+  window.addEventListener('load', () => flog('load t=' + Math.round(performance.now()) + ' hasFocus=' + document.hasFocus()));
+  // Seen on the TV (15.11., several minutes): activate() every 4 s did not bring the focus back,
+  // only a key press did. So each episode is logged once with what the TV showed at that moment,
+  // then two ways back are tried: activate() after 4 s, a relaunch of ourselves after 10 s (results logged).
+  // A relaunch of ourselves does not take the focus from an open overlay either (checked).
+  let lostStep = 0, refocusUntil = 0;
+  function focusContext() {
+    const ws = window.webOSSystem || window.PalmSystem;
+    const parts = ['act=' + (ws ? ws.isActivated : '?'), 'blur ' + (lastBlurAt ? Math.round((Date.now() - lastBlurAt) / 1000) + 's ago' : 'never')];
+    luna(SAM + 'getForegroundAppInfo', { extraInfo: true }).then(r => {
+      const fg = (r && r.foregroundAppInfo || []).map(a => a.appId + '/' + (a.windowType || '').replace('_WEBOS_WINDOW_TYPE_', '').toLowerCase());
+      flog('  context ' + parts.join(' ') + ' fg=' + fg.join(','));
+    }).catch(() => flog('  context ' + parts.join(' ')));
+  }
   setInterval(() => {
-    if (!IS_TV || document.hidden || document.hasFocus()) { lostSince = 0; return; }
+    if (!IS_TV || document.hidden || document.hasFocus()) {
+      if (lostStep > 0) flog('focus back after step ' + lostStep);
+      lostSince = 0; lostStep = 0;
+      return;
+    }
     const now = Date.now();
     if (!lostSince) { lostSince = now; return; }
     // an overlay that blurred us is left alone; only a focus that never came back on its own
-    if (now - lostSince < 4000 || now - lastBlurAt < 60000) return;
-    lostSince = now;   // at most one try every 4 s
-    activateApp();
-    setTimeout(() => flog('watchdog activate -> hasFocus=' + document.hasFocus()), 400);
+    if (now - lastBlurAt < 60000) return;
+    const waited = now - lostSince;
+    const check = label => setTimeout(() => flog('watchdog ' + label + ' -> hasFocus=' + document.hasFocus()), 600);
+    if (lostStep === 0 && waited >= 4000) {
+      lostStep = 1;
+      flog('watchdog: visible without focus');
+      focusContext();
+      activateApp();
+      check('activate');
+    } else if (lostStep === 1 && waited >= 10000) {
+      // (deactivate()+activate() was tried here: deactivate sends the app to the background for minutes)
+      lostStep = 2;   // same path as the Home key, which is known to bring the focus; keeps the view as it is
+      refocusUntil = Date.now() + 3000;
+      luna(SAM + 'launch', { id: 'com.custom.launcher', params: { refocus: true } }).catch(() => {});
+      check('relaunch');
+    }
   }, 2000);
 
   if (!IS_TV) {

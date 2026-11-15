@@ -56,18 +56,34 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
   width: 1920px;
   height: var(--fixed-h);
   padding: 0 var(--side);
-  /* colour light of the focused app behind the logo. Painted into this (static, opaque) layer instead of
-     an own translucent layer: measured on the TV, an extra large blended layer costs ~2x frame time while
-     cards move; repainting this background once per billboard change costs nothing during navigation. */
-  background: radial-gradient(780px 540px at 1619px 334px, var(--g1, transparent) 0%, var(--g2, transparent) 45%, transparent 100%), #000;
+  background: #000;
   overflow: hidden;
   z-index: 2;
+}
+#glow-top {                                   /* colour light behind the logo, only the area it reaches. Painted, never an own layer:
+                                                 a large blended layer costs ~2x frame time while cards move (measured) */
+  position: absolute;
+  left: 839px; top: 0;
+  width: 1081px; height: var(--fixed-h);
+  background: radial-gradient(780px 540px at 780px 334px, var(--g1, transparent) 0%, var(--g2, transparent) 45%, transparent 100%);
+  z-index: -1;                                 /* behind the clock and billboard, above the black of #fixed */
+  pointer-events: none;
+}
+#glow-low {                                   /* the colour light below the billboard: same ellipse as in #fixed, only the area it reaches */
+  position: absolute;
+  left: 840px; top: calc(var(--fixed-h) + 36px);   /* below #fixed-fade */
+  width: 1080px; height: 324px;
+  background: radial-gradient(780px 540px at 779px -230px, var(--g1, transparent) 0%, var(--g2, transparent) 45%, transparent 100%);
+  pointer-events: none;
 }
 #fixed-fade {                                  /* rows sliding up fade into the billboard */
   position: absolute;
   left: 0; top: var(--fixed-h);
   width: 1920px; height: 36px;
-  background: linear-gradient(#000, rgba(0, 0, 0, 0));
+  /* black fading out so sliding cards vanish, with the colour light painted over it; #glow-low starts right
+     below, so the light runs on without a seam. No mask: a mask over the moving rows cost frames on the TV. */
+  background: radial-gradient(780px 540px at 1619px -194px, var(--g1, transparent) 0%, var(--g2, transparent) 45%, transparent 100%),
+    linear-gradient(#000, rgba(0, 0, 0, 0));
   z-index: 2;
   pointer-events: none;
 }
@@ -83,8 +99,7 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
 }
 #clockbox { display: flex; align-items: baseline; gap: 24px; }
 #clock { font-size: 76px; font-weight: 300; line-height: 1; letter-spacing: -2.4px; font-variant-numeric: tabular-nums; color: #fff; }
-#colon { display: inline-block; margin: 0 2px; transform: translateY(-5px); animation: colon 2s ease-in-out infinite; }
-@keyframes colon { 0%, 100% { opacity: .85; } 50% { opacity: .3; } }
+#colon { display: inline-block; margin: 0 2px; transform: translateY(-5px); opacity: .7; }   /* no pulse: an endless animation kept the TV compositing 60 fps (~47 % CPU at rest) */
 #date { font-size: 23px; font-weight: 400; color: var(--text-2); letter-spacing: .2px; }
 
 #pills { display: flex; align-items: center; gap: 16px; }
@@ -152,7 +167,7 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
   margin-top: -135px;
   border-radius: 62px;
   background: var(--c, #22252c);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 255, 255, .1);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(255, 255, 255, .1);
   overflow: hidden;
 }
 #bb-logo img { position: absolute; left: 50%; top: 50%; height: var(--art, 72%); aspect-ratio: 1; object-fit: contain; transform: translate(-50%, -50%); }
@@ -164,7 +179,7 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
 #bb-logo.audio .bb-icon { color: #7dd3fc; }
 #bb-logo.round { border-radius: 50%; }
 #bb-logo.round .bb-icon { width: 110px; height: 110px; margin: -55px 0 0 -55px; color: rgba(255, 255, 255, .78); }
-#bb-logo.round.on { background: var(--lamp, #ffcf8a); box-shadow: 0 0 90px var(--lamp, #ffcf8a), 0 30px 80px rgba(0, 0, 0, .5); }
+#bb-logo.round.on { background: var(--lamp, #ffcf8a); box-shadow: 0 0 50px var(--lamp, #ffcf8a), 0 16px 36px rgba(0, 0, 0, .45);   /* must fade out above the bottom of #fixed (y 528), else it is cut */ }
 #bb-logo.round.on .bb-icon { color: #17120a; }
 #bb-logo.round.offline .bb-icon { color: #f59e8b; }
 #bb-logo.display { background: linear-gradient(150deg, #2d1a3f, #150b1f); }
@@ -411,7 +426,7 @@ body.menu-open #menu { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 #dim { position: absolute; inset: 0; z-index: 100; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s ease; }
 body.idle #dim { opacity: .75; transition: opacity 4s ease; }
 body.screensaver #dim { opacity: 1; transition: opacity 2s ease; }
-body.idle #colon, body.screensaver #colon { animation: none; }
+
 
 /* ---------- Gemini assistant ---------- */
 .gm {

@@ -11,10 +11,13 @@
     <div id="page"><!-- fades/zooms when an app starts -->
 
       <!-- rows (Zuletzt & Favoriten, Smart Home, categories); built by app.js, slide up under the billboard -->
+      <!-- the colour light continuing below the billboard, behind the rows (static, painted once per change) -->
+      <div id="glow-low"></div>
       <div id="rows"><div id="scroller"></div></div>
 
       <!-- fixed top: clock, pills and the billboard describing the focused card -->
       <div id="fixed">
+        <div id="glow-top"></div><!-- colour light behind the billboard logo -->
         <header id="topbar" class="reveal" style="--d: 0ms">
           <div id="clockbox">
             <div id="clock"><span id="hh">--</span><span id="colon">:</span><span id="mm">--</span></div>
