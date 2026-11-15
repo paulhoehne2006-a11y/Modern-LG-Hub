@@ -682,7 +682,10 @@
     for (const k of [...els.keys()]) if (!live.has(k)) els.delete(k);
     layoutDirty = true;
     let key = focusId;
-    if (!key || !els.has(key)) key = (key && findKey(itemIdOf(key))) || firstId();
+    // right after Home the focus belongs on the first card, even when the app list arrives a moment
+    // later and re-sorts the row (the old first app would otherwise drag the focus to its new place)
+    if (homeStartUntil > Date.now()) key = firstId();
+    else if (!key || !els.has(key)) key = (key && findKey(itemIdOf(key))) || firstId();
     setFocus(key, { instant: !focusId, keepScroll: true });
   }
 
@@ -712,6 +715,7 @@
   /* Focus, navigation, sliding rows                                     */
   /* ------------------------------------------------------------------ */
   let focusId = null;            // focus key
+  let homeStartUntil = 0;        // after Home: keep the focus on the first card while the row re-sorts
   let mode = 'home';             // 'home' | 'menu' | 'move'
   let layoutDirty = true;
   let geom = [];                 // per navigable row: {top, xs, ws, maxScroll}
@@ -759,6 +763,7 @@
     const el = els.get(key);
     if (!el) return;
     opts = opts || {};
+    if (opts.fromPointer) homeStartUntil = 0;
     measure();
     const prev = focusId && els.get(focusId);
     if (prev && prev !== el) prev.classList.remove('focused', 'pressed');
@@ -820,6 +825,7 @@
   }
 
   function move(dir) {
+    homeStartUntil = 0;
     measure();
     const pos = posOf(focusId);
     if (!pos) { setFocus(firstId()); return; }
@@ -1610,12 +1616,47 @@
     if (mode === 'move') endMove();
     const first = firstId();
     if (first) setFocus(first);
+    homeStartUntil = Date.now() + 5000;   // until the user moves
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) resetKeys(); else onShown(); });
   window.addEventListener('blur', resetKeys);
   window.addEventListener('focus', onShown);
   document.addEventListener('webOSRelaunch', onRelaunch);
   window.addEventListener('webOSRelaunch', onRelaunch);
+
+  // Focus watchdog. Seen on the TV: the launcher was on screen but did not have the key focus,
+  // so the first key press only gave it focus and did nothing else ("press twice").
+  // While the launcher is visible without focus and no overlay (quick settings, voice) took it
+  // via a blur, ask the compositor for the focus again. activate() does not steal the focus
+  // from an open overlay (checked with quick settings). Every step is kept in a small log
+  // (localStorage "launcher.focuslog", also window.__launcher.focusLog) to find the trigger.
+  const FOCUS_LOG_KEY = 'launcher.focuslog';
+  let focusLog = [];
+  try { focusLog = JSON.parse(localStorage.getItem(FOCUS_LOG_KEY)) || []; } catch (e) { focusLog = []; }
+  function flog(what) {
+    focusLog.push(new Date().toISOString().slice(5, 19) + ' ' + what);
+    if (focusLog.length > 60) focusLog = focusLog.slice(-60);
+    try { localStorage.setItem(FOCUS_LOG_KEY, JSON.stringify(focusLog)); } catch (e) { /* ignore */ }
+  }
+  let lastBlurAt = 0, lostSince = 0, lastShowAt = Date.now();
+  window.addEventListener('blur', () => { lastBlurAt = Date.now(); flog('blur vis=' + document.visibilityState); });
+  window.addEventListener('focus', () => {
+    // gained without a show/relaunch just before it: most likely a key press that was swallowed
+    const quiet = Date.now() - Math.max(lastShowAt, lastRelaunch) > 1500;
+    flog('focus' + (quiet && !document.hidden ? ' (by key?)' : ''));
+  });
+  document.addEventListener('visibilitychange', () => { lastShowAt = Date.now(); flog('vis ' + document.visibilityState); });
+  flog('start hasFocus=' + document.hasFocus());
+  setInterval(() => {
+    if (!IS_TV || document.hidden || document.hasFocus()) { lostSince = 0; return; }
+    const now = Date.now();
+    if (!lostSince) { lostSince = now; return; }
+    // an overlay that blurred us is left alone; only a focus that never came back on its own
+    if (now - lostSince < 4000 || now - lastBlurAt < 60000) return;
+    lostSince = now;   // at most one try every 4 s
+    activateApp();
+    setTimeout(() => flog('watchdog activate -> hasFocus=' + document.hasFocus()), 400);
+  }, 2000);
 
   if (!IS_TV) {
     // PC preview only: the TV has these fonts built in, and there is no backend
@@ -2042,7 +2083,7 @@
 
   // for tests and debugging from the web inspector
   window.__launcher = {
-    get focus() { return focusId; }, get mode() { return mode; }, get recent() { return recentId; },
+    get focus() { return focusId; }, get focusLog() { return focusLog.slice(); }, get geom() { return JSON.stringify(geom.map(g => ({ top: g.top, xs: g.xs.map(Math.round).join(","), max: g.maxScroll }))); }, get scrollXs() { return [...rowEls].map(([k, re]) => k + "=" + re.scrollX).join(" "); }, get mode() { return mode; }, get recent() { return recentId; },
     get rows() { return rows.map(r => r.key + ': ' + r.ids.join(', ')); }, get favs() { return favIds.slice(); },
     get tiles() { return tileIds.slice(); }, get scrollY() { return scrollY; }, get billboard() { return bbKey; },
     setUsage(u) { state.usage = u; render(); }, get prefs() { return clone(prefs); },

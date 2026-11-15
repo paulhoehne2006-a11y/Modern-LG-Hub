@@ -54,8 +54,7 @@ modern-lg-hub/
     ├── server.py                # Fast REST API (port 8080) for TV & Smart Home actions
     ├── tv.py                    # Local Luna bus TV controller (power, apps, screen off)
     ├── localhome.py             # Local smart home control (WiZ UDP, Tapo KLAP), replaces SmartThings
-    ├── devices.json             # Smart home devices (MAC, room, name)
-    └── smartthings.py           # Old SmartThings cloud client (unused)
+    └── devices.json             # Smart home devices (MAC, room, name)
 ```
 
 ---
