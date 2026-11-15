@@ -1199,7 +1199,8 @@
   function closeMenu() {
     menu = null;
     menuRefresh = null;
-    if (mode === 'menu') mode = 'home';
+    if (picker) { clearTimeout(picker.sendTimer); if (picker.dirty) pickerSend(); picker = null; }
+    if (mode === 'menu' || mode === 'picker') mode = 'home';
     flushRender();
     document.body.classList.remove('menu-open');
     setTimeout(() => { if (!menu) menuEl.hidden = true; }, 320);
@@ -1322,16 +1323,136 @@
     const d = t.dev, caps = d.capabilities || [];
     const tones = TONES.filter(x => caps.includes(x.kelvin ? 'white' : 'color'));
     const again = () => openToneMenu(id, back, menu ? menu.index : 0);
+    const entries = [{
+      label: caps.includes('color') ? 'Eigene Farbe …' : 'Eigener Weißton …', hint: caps.includes('color') ? 'alle Farben' : 'stufenlos',
+      swatch: 'conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)',
+      action: () => openPicker(id, () => openToneMenu(id, back, 0))
+    }];
+    for (const x of tones) {
+      const cur = toneIs(d, x);
+      entries.push({ label: x.label, hint: cur ? 'aktuell' : (x.hint || ''), on: cur, swatch: x.color || kelvinHex(x.kelvin),
+        action: () => smartSet([d], true, null, id, x.kelvin ? { kelvin: x.kelvin } : { color: x.color }) });
+    }
     openMenu({
       title: 'Farbe', sub: d.name + ' · ' + deviceState(d),
-      entries: tones.map(x => {
-        const cur = toneIs(d, x);
-        return { label: x.label, hint: cur ? 'aktuell' : (x.hint || ''), on: cur, swatch: x.color || kelvinHex(x.kelvin),
-          action: () => smartSet([d], true, null, id, x.kelvin ? { kelvin: x.kelvin } : { color: x.color }) };
-      }),
-      index: index || 0, refresh: again, back,
+      entries, index: index || 0, refresh: again, back,
       hint: 'OK stellt die Farbe ein, das Menü bleibt offen. Links/Zurück geht eine Ebene zurück.'
     });
+  }
+
+  /* Colour picker: every colour (hue + saturation) and every white tone, live on the lamp.
+     Up/down picks a slider, left/right moves it (held keys move faster), OK or Back closes. */
+  let picker = null;
+  const KELVIN_MIN = 2200, KELVIN_MAX = 6500;
+
+  function hsvHex(h, s) {   // value is always full: the lamp's brightness is set separately
+    const f = n => { const k = (n + h / 60) % 6; return 1 - s * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return '#' + [f(5), f(3), f(1)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+  }
+  function hexHsv(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    if (!m) return null;
+    const [r, g, b] = [m[1], m[2], m[3]].map(x => parseInt(x, 16) / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), c = max - min;
+    let h = 0;
+    if (c) h = max === r ? 60 * (((g - b) / c) % 6) : max === g ? 60 * ((b - r) / c + 2) : 60 * ((r - g) / c + 4);
+    return { h: (h + 360) % 360, s: max ? c / max : 0 };
+  }
+
+  function openPicker(id, back) {
+    const t = tiles.get(id);
+    if (!t || t.kind !== 'dev') { closeMenu(); return; }
+    const d = t.dev, caps = d.capabilities || [];
+    const rows = [];
+    if (caps.includes('color')) rows.push('hue', 'sat');
+    if (caps.includes('white')) rows.push('kelvin');
+    if (!rows.length) { closeMenu(); return; }
+    const hsv = (!d.kelvin && hexHsv(d.color)) || { h: 30, s: 1 };
+    picker = {
+      id, d, back, rows, row: d.kelvin && rows.includes('kelvin') ? rows.indexOf('kelvin') : 0,
+      h: Math.round(hsv.h), s: Math.round(hsv.s * 100) / 100,
+      k: Math.max(KELVIN_MIN, Math.min(KELVIN_MAX, Math.round((d.kelvin || 2700) / 100) * 100)),
+      white: !!d.kelvin || !caps.includes('color'), sendTimer: 0, els: {}
+    };
+    openMenu({ title: rows[0] === 'hue' ? 'Eigene Farbe' : 'Eigener Weißton', sub: d.name, entries: [],
+      hint: '▲▼ Regler wählen · ◀▶ verstellen (halten = schneller) · OK fertig' });
+    mode = 'picker';
+    menuCursor.style.display = 'none';
+    const box = h('div', 'pk');
+    const prev = h('div', 'pk-preview');
+    box.appendChild(prev);
+    picker.els.preview = prev;
+    const names = { hue: 'Farbton', sat: 'Sättigung', kelvin: 'Weißton' };
+    picker.els.rows = rows.map(r => {
+      const row = h('div', 'pk-row');
+      const head = h('div', 'pk-head');
+      head.appendChild(h('span', 'pk-label', names[r]));
+      const val = h('span', 'pk-val');
+      head.appendChild(val);
+      const bar = h('div', 'pk-bar ' + r);
+      const knob = h('b', '');
+      bar.appendChild(knob);
+      row.appendChild(head); row.appendChild(bar);
+      box.appendChild(row);
+      return { r, row, val, bar, knob };
+    });
+    menuList.appendChild(box);
+    pickerPaint();
+  }
+
+  function pickerPaint() {
+    const p = picker;
+    if (!p) return;
+    const color = p.white ? kelvinHex(p.k) : hsvHex(p.h, p.s);
+    p.els.preview.style.setProperty('--c', color);
+    for (const [i, x] of p.els.rows.entries()) {
+      x.row.classList.toggle('focused', i === p.row);
+      x.row.classList.toggle('active', x.r === 'kelvin' ? p.white : !p.white);
+      let pos, text;
+      if (x.r === 'hue') { pos = p.h / 360; text = p.h + '°'; }
+      else if (x.r === 'sat') { pos = p.s; text = Math.round(p.s * 100) + ' %'; x.bar.style.setProperty('--full', hsvHex(p.h, 1)); }
+      else { pos = (p.k - KELVIN_MIN) / (KELVIN_MAX - KELVIN_MIN); text = p.k + ' K'; }
+      x.knob.style.setProperty('--p', pos.toFixed(4));
+      x.val.textContent = text;
+    }
+  }
+
+  function pickerKey(k, e) {
+    const p = picker;
+    if (!p) { closeMenu(); return; }
+    if (k === KEY.UP || k === KEY.DOWN) {
+      p.row = Math.max(0, Math.min(p.rows.length - 1, p.row + (k === KEY.UP ? -1 : 1)));
+      pickerPaint();
+      return;
+    }
+    if (k === KEY.LEFT || k === KEY.RIGHT) {
+      const now = Date.now(), dir = k === KEY.LEFT ? -1 : 1;
+      const fast = e.repeat || now - (p.lastKey || 0) < 260 ? 3 : 1;   // held key, or the phone app repeating
+      p.lastKey = now;
+      p.dirty = true;
+      const r = p.rows[p.row];
+      if (r === 'hue') { p.h = ((p.h + dir * 5 * fast) % 360 + 360) % 360; p.white = false; }
+      else if (r === 'sat') { p.s = Math.max(0, Math.min(1, Math.round((p.s + dir * 0.05 * fast) * 100) / 100)); p.white = false; }
+      else { p.k = Math.max(KELVIN_MIN, Math.min(KELVIN_MAX, p.k + dir * 100 * fast)); p.white = true; }
+      pickerPaint();
+      clearTimeout(p.sendTimer);   // the lamp follows once the value rests a moment (no request per key)
+      p.sendTimer = setTimeout(pickerSend, 160);
+      return;
+    }
+    if (k === KEY.OK && (e.repeat || okBlocked)) return;
+    // OK, Back, Esc: done (the lamp already shows the colour)
+    clearTimeout(p.sendTimer);
+    if (p.dirty) pickerSend();
+    const back = p.back;
+    picker = null;
+    if (k === KEY.OK) { okBlocked = true; closeMenu(); } else if (back) back(); else closeMenu();
+  }
+
+  function pickerSend() {
+    const p = picker;
+    if (!p) return;
+    p.dirty = false;
+    smartSet([p.d], true, null, null, p.white ? { kelvin: p.k } : { color: hsvHex(p.h, p.s) });
   }
 
   function setMainRoom(room) {
@@ -1495,10 +1616,11 @@
     wake();
     if (k === KEY.INFO) {
       if (e.repeat) return;
-      if (mode === 'menu') closeMenu();
+      if (mode === 'menu' || mode === 'picker') closeMenu();
       else if (mode === 'home' && !okDown && focusId) { homeStartUntil = 0; openCardMenu(focusId); }
       return;
     }
+    if (mode === 'picker') { pickerKey(k, e); return; }
     if (mode === 'menu') {
       if (k === KEY.UP) menuFocus(menu.index - 1);
       else if (k === KEY.DOWN) menuFocus(menu.index + 1);
@@ -1539,7 +1661,7 @@
     if (!okLong && mode === 'home') activate(focusId);
   });
 
-  $('scrim').addEventListener('click', () => { if (mode === 'menu') closeMenu(); });
+  $('scrim').addEventListener('click', () => { if (mode === 'menu' || mode === 'picker') closeMenu(); });
 
   let lastWheel = 0;
   document.addEventListener('wheel', e => {
@@ -1678,7 +1800,7 @@
     lastRelaunch = now;
     onShown();
     if (handleGeminiParam(launchParams(e))) return;   // mic button: open/close Gemini, keep the page as it is
-    if (mode === 'menu') closeMenu();
+    if (mode === 'menu' || mode === 'picker') closeMenu();
     if (geminiModalOpen) closeGeminiModal();
     if (mode === 'move') endMove();
     const first = firstId();
@@ -2106,7 +2228,7 @@
 
   function handleGeminiParam(p) {
     if (!p || !p.gemini) return false;
-    if (mode === 'menu') closeMenu();
+    if (mode === 'menu' || mode === 'picker') closeMenu();
     if (mode === 'move') endMove();
     if (p.gemini === 'toggle') toggleGeminiModal(); else openGeminiModal();
     return true;
