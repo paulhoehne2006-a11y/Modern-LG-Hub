@@ -313,6 +313,7 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
 #scrim {
   position: absolute;
   inset: 0;
+  z-index: 10;                                  /* above #rows (1) and #fixed (2) */
   background: rgba(0, 0, 0, .72);
   opacity: 0;
   pointer-events: none;
@@ -321,6 +322,7 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
 body.menu-open #scrim { opacity: 1; pointer-events: auto; }
 #menu {
   position: absolute;
+  z-index: 11;
   left: 50%; top: 50%;
   width: 640px;
   padding: 26px 16px 16px;
@@ -363,6 +365,16 @@ body.menu-open #menu { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   transition: color .15s ease;
 }
 .mi span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi-swatch {
+  display: inline-block;
+  width: 18px; height: 18px;
+  margin-right: 14px;
+  vertical-align: -2px;
+  border-radius: 50%;
+  background: var(--sw);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .25);
+}
+.mi.focused .mi-swatch { box-shadow: 0 0 0 1px rgba(0, 0, 0, .25); }
 .mi .mi-hint { font-size: 18px; color: rgba(255, 255, 255, .45); flex: none; font-weight: 500; transition: color .15s ease; }
 .mi.focused { color: #000; font-weight: 600; }
 .mi.focused .mi-hint { color: rgba(0, 0, 0, .55); }
@@ -375,6 +387,7 @@ body.menu-open #menu { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 /* ---------- toast ---------- */
 #toast {
   position: absolute;
+  z-index: 12;
   left: 50%; bottom: 56px;
   max-width: 1200px;
   transform: translate(-50%, 16px) scale(.98);
@@ -395,7 +408,7 @@ body.menu-open #menu { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* ---------- idle dimming & screensaver (OLED care) ---------- */
-#dim { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s ease; }
+#dim { position: absolute; inset: 0; z-index: 100; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s ease; }
 body.idle #dim { opacity: .75; transition: opacity 4s ease; }
 body.screensaver #dim { opacity: 1; transition: opacity 2s ease; }
 body.idle #colon, body.screensaver #colon { animation: none; }

@@ -206,6 +206,11 @@ class LGTV:
     def send_remote_key(key: str, fast: bool = True) -> Dict[str, Any]:
         """Sends remote control key (UP, DOWN, LEFT, RIGHT, OK, BACK, HOME, etc.)."""
         normalized = KEY_MAP.get(key.lower().strip(), key.upper().strip())
+        if normalized in ("LONG_ENTER", "OK_LONG"):
+            # A held OK cannot be sent over the network input (it only knows press+release).
+            # The hub opens its options menu on INFO instead; any other app gets a plain OK.
+            fg = luna_call("luna://com.webos.applicationManager/getForegroundAppInfo", {})
+            normalized = "INFO" if fg.get("appId") == "com.custom.launcher" else "ENTER"
         ok = send_key(normalized, fast=fast)
         return {"action": "send_key", "key": normalized, "success": ok}
 

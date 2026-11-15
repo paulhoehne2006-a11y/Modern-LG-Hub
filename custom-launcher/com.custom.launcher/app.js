@@ -895,9 +895,10 @@
           keys: okLong(t.on ? 'Alles ausschalten' : 'Alles einschalten', 'Einzelne Geräte'),
           icon: 'room', logo: 'icon round' + (t.on ? ' on' : ''), lamp, glow: t.on ? lamp : 'rgb(70,78,96)' };
       }
-      const light = t.dev.type === 'light';
+      const light = t.dev.type === 'light', caps = t.dev.capabilities || [];
+      const tune = caps.includes('color') || caps.includes('white') ? 'Farbe & Helligkeit' : 'Helligkeit';
       return { kicker: t.dev.room + ' · ' + (light ? 'Licht' : 'Steckdose'), title: t.title, desc: t.state,
-        keys: okLong(t.dev.state === 'on' ? 'Ausschalten' : 'Einschalten', light ? 'Helligkeit' : 'Optionen'),
+        keys: okLong(t.dev.state === 'on' ? 'Ausschalten' : 'Einschalten', light ? tune : 'Optionen'),
         icon: t.icon, logo: 'icon round' + (t.on ? ' on' : '') + (t.offline ? ' offline' : ''), lamp, glow: t.on ? lamp : 'rgb(70,78,96)' };
     }
     const it = items.get(itemIdOf(key));
@@ -1048,7 +1049,7 @@
   }
 
   let smartRefreshTimer = 0;
-  async function smartSet(devs, on, brightness, tileId) {
+  async function smartSet(devs, on, brightness, tileId, tone) {   // tone: { color: "#rrggbb" } or { kelvin }
     if (!devs.length) return;
     const until = Date.now() + 5000;
     for (const d of devs) pending.set(d.id, { state: on ? 'on' : 'off', brightness: brightness != null ? brightness : null, until });
@@ -1059,6 +1060,7 @@
       if (!IS_TV) return Promise.resolve({ status: 'ok' });
       const body = { id: d.id, state: on ? 'on' : 'off' };
       if (brightness != null) body.brightness = brightness;
+      if (tone) Object.assign(body, tone);
       return api('/api/smarthome/set', body).catch(() => ({ status: 'error', error: 'Smart-Home-Server nicht erreichbar' }));
     }));
     const failed = devs.filter((d, i) => !results[i] || results[i].status !== 'ok');
@@ -1066,8 +1068,12 @@
       if (failed.includes(d)) pending.delete(d.id);
       else if (state.smart) {   // keep the new state in the model until the next poll confirms it
         const m = state.smart.find(x => x.id === d.id);
-        if (m) { m.state = on ? 'on' : 'off'; if (brightness != null) m.brightness = brightness; m.online = true; }
+        if (m) { m.state = on ? 'on' : 'off'; if (brightness != null) m.brightness = brightness; if (tone) { m.color = tone.color || kelvinHex(tone.kelvin); m.kelvin = tone.kelvin || null; } m.online = true; }
       }
+    }
+    if (tone && failed.length < devs.length) {   // show the new colour at once, not with the next poll
+      renderTiles();
+      if (mode === 'menu' && menuRefresh) menuRefresh();
     }
     if (failed.length) {
       const err = results.find(r => r && r.status !== 'ok');
@@ -1152,7 +1158,13 @@
     def.entries.forEach((entry, i) => {
       const row = h('div', 'mi' + (entry.danger ? ' danger' : '') + (entry.on ? ' on' : ''));
       row.setAttribute('role', 'menuitem');
-      row.appendChild(h('span', '', entry.label));
+      const label = h('span', '', entry.label);
+      if (entry.swatch) {
+        const sw = h('i', 'mi-swatch');
+        sw.style.setProperty('--sw', entry.swatch);
+        label.insertBefore(sw, label.firstChild);
+      }
+      row.appendChild(label);
       if (entry.hint) row.appendChild(h('span', 'mi-hint', entry.hint));
       row.addEventListener('mouseenter', () => menuFocus(i));
       row.addEventListener('click', () => { menuFocus(i); menuSelect(); });
@@ -1250,6 +1262,10 @@
     if (t.kind === 'dev') {
       const d = t.dev;
       const entries = [{ label: d.state === 'on' ? 'Ausschalten' : 'Einschalten', action: () => { activateTile(tiles.get(id) || t); } }];
+      const caps = d.capabilities || [];
+      if (d.type === 'light' && (caps.includes('color') || caps.includes('white'))) {
+        entries.push({ label: 'Farbe', hint: (TONES.find(x => toneIs(d, x)) || {}).label || '', action: () => openToneMenu(id, () => openTileMenu(id, 1)) });
+      }
       if (d.type === 'light') {
         for (const b of [10, 25, 50, 75, 100]) {
           const cur = d.state === 'on' && typeof d.brightness === 'number' && Math.abs(d.brightness - b) < 5;
@@ -1272,6 +1288,50 @@
     }
     entries.push({ label: 'Als Hauptraum zeigen', hint: 'Geräte einzeln', action: () => { setMainRoom(t.room); closeMenu(); } });
     openMenu({ title: t.room, sub: t.state, entries, index, refresh: again, hint: 'OK schaltet das Gerät um.' });
+  }
+
+  // colours and white tones for WiZ lights (white needs caps "white", colours need "color")
+  const TONES = [
+    { label: 'Warmweiß', hint: '2700 K', kelvin: 2700 },
+    { label: 'Neutralweiß', hint: '4000 K', kelvin: 4000 },
+    { label: 'Tageslicht', hint: '6500 K', kelvin: 6500 },
+    { label: 'Rot', color: '#ff0000' },
+    { label: 'Orange', color: '#ff6000' },
+    { label: 'Gelb', color: '#ffc000' },
+    { label: 'Grün', color: '#00ff20' },
+    { label: 'Türkis', color: '#00ffc0' },
+    { label: 'Blau', color: '#0030ff' },
+    { label: 'Lila', color: '#8000ff' },
+    { label: 'Pink', color: '#ff0080' }
+  ];
+  function kelvinHex(k) {   // rough colour of a white tone, only for the tile until the next poll
+    if (!k) return null;
+    const t = Math.max(0, Math.min(1, (k - 2200) / 4300));
+    const c = (a, b) => Math.round(a + (b - a) * t).toString(16).padStart(2, '0');
+    return '#' + c(255, 255) + c(160, 245) + c(60, 235);
+  }
+  function toneIs(d, x) {
+    if (d.state !== 'on') return false;
+    if (x.kelvin) return !!d.kelvin && Math.abs(d.kelvin - x.kelvin) < 150;
+    return !d.kelvin && typeof d.color === 'string' && d.color.toLowerCase() === x.color;
+  }
+
+  function openToneMenu(id, back, index) {
+    const t = tiles.get(id);
+    if (!t || t.kind !== 'dev') { closeMenu(); return; }
+    const d = t.dev, caps = d.capabilities || [];
+    const tones = TONES.filter(x => caps.includes(x.kelvin ? 'white' : 'color'));
+    const again = () => openToneMenu(id, back, menu ? menu.index : 0);
+    openMenu({
+      title: 'Farbe', sub: d.name + ' · ' + deviceState(d),
+      entries: tones.map(x => {
+        const cur = toneIs(d, x);
+        return { label: x.label, hint: cur ? 'aktuell' : (x.hint || ''), on: cur, swatch: x.color || kelvinHex(x.kelvin),
+          action: () => smartSet([d], true, null, id, x.kelvin ? { kelvin: x.kelvin } : { color: x.color }) };
+      }),
+      index: index || 0, refresh: again, back,
+      hint: 'OK stellt die Farbe ein, das Menü bleibt offen. Links/Zurück geht eine Ebene zurück.'
+    });
   }
 
   function setMainRoom(room) {
@@ -1405,7 +1465,8 @@
   /* ------------------------------------------------------------------ */
   /* Keys and pointer                                                    */
   /* ------------------------------------------------------------------ */
-  const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27 };
+  // INFO: "long OK" from the phone app (the network input can only press+release, never hold)
+  const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, ESC: 27, INFO: 457 };
   const DIRS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
   let okDown = false, okLong = false, okTimer = 0;
   let okBlocked = false;         // OK is still held from an action that just finished: ignore until released
@@ -1429,9 +1490,15 @@
       }
       return;
     }
-    if (!(k in DIRS) && k !== KEY.OK && k !== KEY.BACK && k !== KEY.ESC) return;
+    if (!(k in DIRS) && k !== KEY.OK && k !== KEY.BACK && k !== KEY.ESC && k !== KEY.INFO) return;
     e.preventDefault();
     wake();
+    if (k === KEY.INFO) {
+      if (e.repeat) return;
+      if (mode === 'menu') closeMenu();
+      else if (mode === 'home' && !okDown && focusId) { homeStartUntil = 0; openCardMenu(focusId); }
+      return;
+    }
     if (mode === 'menu') {
       if (k === KEY.UP) menuFocus(menu.index - 1);
       else if (k === KEY.DOWN) menuFocus(menu.index + 1);
