@@ -17,22 +17,22 @@ Designed for pure speed, zero bloat, elegant dark aesthetics, and seamless hardw
   - Pressing the physical **Home** button on your LG Magic Remote reliably brings you to **Modern LG Hub**—never the slow, ad-filled stock webOS home.
   - Event-driven background helper daemon (`launcherd.py`) catches OS lifecycle events in real time without CPU polling.
 
-- **🌙 OLED Screen-Off Mode ("Display Aus")**
+- **🌙 OLED Screen-Off Mode ("Display aus")**
   - Shuts off the OLED panel instantly to save power and protect against burn-in.
   - Keeps apps and digital audio (e.g., optical Toslink to Denon AVR / Soundbars) running continuously in the background.
   - Wake up anytime with a simple press of any button on the remote.
 
 - **💡 Smart Home Dashboard & Management**
   - Integrated smart device tiles with live status indicators (lights, smart plugs).
-  - Interactive **Smart Home Manager**: reorder, swap, or toggle visible smart home devices directly from your remote.
+  - Toggle devices or whole rooms, set brightness and colour (sliders) and pick the main room directly from your remote.
   - Direct integration with local controller APIs; smart home (WiZ bulbs, Tapo plugs) controlled locally over the LAN, no cloud.
 
 - **🤖 Local Gemini AI TV Assistant**
-  - Built-in Gemini voice/text assistant modal for smart TV commands, media searches, and automations.
+  - Built-in Gemini assistant (topic chips on the TV, free text/voice from the phone app) for TV commands, smart home and everyday questions.
   - Lightweight Python backend server running locally on the TV.
 
 - **🛡️ Hardened & Privacy-First**
-  - Adware, analytics, and telemetry domains sinkholed.
+  - Adware, analytics, and telemetry domains blocked (via the "Life's Good Without Spying" Homebrew app, see `custom-launcher/audit/privacy.md`).
   - Insecure telnet daemon disabled by default; secure SSH key authentication only.
 
 ---
@@ -51,7 +51,8 @@ modern-lg-hub/
 │   ├── tools/                   # Deployment, CDP debugging & automation tools
 │   └── audit/                   # Security, boot chain, and bloat audit reports
 └── gemini-tv-controller/        # Local Python REST backend & AI assistant
-    ├── server.py                # Fast REST API (port 8080) for TV & Smart Home actions
+    ├── server.py                # REST API (port 8080, LAN) for launcher + phone app, see docs/API.md
+    ├── agent.py                 # Gemini assistant (tool calls)
     ├── tv.py                    # Local Luna bus TV controller (power, apps, screen off)
     ├── localhome.py             # Local smart home control (WiZ UDP, Tapo KLAP), replaces SmartThings
     └── devices.json             # Smart home devices (MAC, room, name)
@@ -62,7 +63,7 @@ modern-lg-hub/
 ## 🚀 Quick Start & Deployment
 
 ### Prerequisites
-- Rooted LG webOS TV (webOS 4+ through webOS 24 / webOS 10.x, e.g. via Homebrew Channel).
+- Rooted LG webOS TV via Homebrew Channel. Built and tested only on an LG OLED G4 with webOS 10.3.1; the Home-key interception patches firmware-specific files and may not work elsewhere.
 - SSH access enabled (`root@<TV_IP>`).
 
 ### Deploy to TV
@@ -91,7 +92,7 @@ This will:
 | **OK (Long Press)** | Open context menu (Pin, Move, Hide, Manage Smart Home) |
 | **Home Button** | Return to Modern LG Hub top screen from anywhere |
 | **Back / Exit** | Dismiss menus/modals or jump to top |
-| **Magic Pointer** | Direct cursor pointing with gyro tilt effects |
+| **Magic Pointer** | Point and click on cards, menus and sliders |
 
 ---
 
@@ -108,5 +109,15 @@ ssh root@<TV_IP> "rm /var/lib/webosbrew/custom-launcher.off"
 
 ---
 
+## 🧪 Tests
+
+```bash
+python3 -m unittest discover -s tests -p 'test_hub_*.py'
+```
+
+Backend setup (`.env`, `devices.json`) and the full HTTP API: [docs/API.md](docs/API.md).
+
+---
+
 ## 📄 License
-GPLv3 / Open Source. See [COPYING](COPYING).
+AGPL v3. See [COPYING](COPYING).

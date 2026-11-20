@@ -7,15 +7,15 @@ TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@192.168.178
 | Pfad | Was |
 |---|---|
 | `com.custom.launcher/` | **Die App** (Quelltext). `index.html`, `style.css`, `app.js` = Oberfläche; `launcherd.py` = Root-Hilfsdienst; `appinfo.json`, `icon.png`; `data/` nur Vorschau-Daten für den PC |
-| `com.custom.launcher_<version>_all.ipk` | Installationspaket, wird von `build-ipk.sh` erzeugt (nicht im Git). Aktuelle Version steht in `com.custom.launcher/appinfo.json` (3.8.2) |
-| `../gemini-tv-controller/` | Backend auf dem TV (`server.py`, Port 8080, nur `127.0.0.1`): Gemini-Assistent, Smart-Home-Kacheln (WiZ/Tapo lokal im LAN), Wetter, OLED-aus |
+| `com.custom.launcher_<version>_all.ipk` | Installationspaket, wird von `build-ipk.sh` erzeugt (nicht im Git). Aktuelle Version steht in `com.custom.launcher/appinfo.json` (3.9.0) |
+| `../gemini-tv-controller/` | Backend auf dem TV (`server.py`, Port 8080, im Heimnetz erreichbar für die Handy-App; Zugriffsmodell und alle Endpunkte in `../docs/API.md`): Gemini-Assistent, Smart-Home-Kacheln (WiZ/Tapo lokal im LAN), Wetter, OLED-aus |
 | `audit/review.md`, `audit/qa.md` | Code-Review und TV-Test der Agents (Fehlerlisten, alle wichtigen behoben) |
 | `boot/99-custom-launcher` | Boot-Hook, wird auf dem TV nach `/var/lib/webosbrew/init.d/` kopiert |
 | `build-ipk.sh` | Baut das .ipk aus `com.custom.launcher/` |
 | `tools/deploy.sh` | **Ein Befehl für alles**: bauen, installieren, Boot-Hook setzen, Dienst neu starten |
 | `tools/tv.sh`, `luna.sh`, `key.sh`, `tvshot.sh` | Hilfen: Befehl auf dem TV (mit TTY), Luna-Aufruf, Fernbedienungstaste senden, TV-Bildschirmfoto |
 | `tools/cdp.sh` | Web-Inspector des TVs: JS in der Launcher-Seite ausführen, Tasten, Screenshots |
-| `tools/localshot.sh`, `mkdata.js` | Launcher am PC in Headless-Edge rendern/bedienen (Vorschau mit echten TV-Daten) |
+| `tools/localshot.sh`, `mkdata.js` | Launcher am PC in einem Headless-Chromium/Edge rendern/bedienen (Vorschau mit echten TV-Daten; findet den Browser selbst, sonst `--browser` oder `LOCALSHOT_BROWSER`) |
 | `design/fixtures/` | Vom TV kopierte Original-Icons, App-Metadaten, LG-Schriften (33 MB, nur für die PC-Vorschau) |
 | `audit/` | Bestandsaufnahme des TVs: `privacy.md`, `bloat.md`, `boot.md`, `research.md`, Rohdaten in `raw/`, `blocklist/` |
 | `README.md` | diese Datei |
@@ -29,7 +29,7 @@ Auf dem TV liegt:
 
 1. **Launcher v1** (Schwarz, Uhr, Kacheln) gebaut, per SSH installiert.
 2. **Home-Taste ersetzt**: LGs Startbildschirm (`com.webos.app.home`) ist Boot-Abhängigkeit und bleibt installiert; ein Root-Dienst (`launcherd.py`) hört auf App-Ereignisse und öffnet bei jedem Erscheinen sofort den eigenen Launcher (gemessen ca. 0,3–0,4 s, kein Polling mehr).
-3. **Launcher v2** komplett neu im Apple-TV-Stil: Favoritenreihe (PC/HDMI 1, HDMI 2, YouTube) + App-Raster, Karten in der Farbe des App-Icons, Fokus mit Skalierung/Glanz/Glow, Schwebelicht in Fokusfarbe, Zeigerkippen für die Magic Remote, OK lang drücken = Menü (Öffnen / Favorit / Verschieben / Ausblenden), „Mehr“-Menü, OLED-Schutz (Pixelverschiebung, Abdunkeln nach 2 min, echtes Schwarz).
+3. **Launcher v2** komplett neu im Apple-TV-Stil: Favoritenreihe (PC/HDMI 1, HDMI 2, YouTube) + App-Raster, Karten in der Farbe des App-Icons, Fokus mit Skalierung/Glanz/Glow, Schwebelicht in Fokusfarbe, OK lang drücken = Menü (Öffnen / Favorit / Verschieben / Ausblenden), „Mehr“-Menü, OLED-Schutz (Pixelverschiebung, Abdunkeln nach 1 min ohne Taste – bei offenem Gemini nach 3 min –, Bildschirmschoner nach 4 min, echtes Schwarz).
 3b. **Reihenfolge nach Nutzung** (v2.1): Der Root-Dienst zählt, welche App wie oft nach vorn kommt (auch über Fernbedienungstasten wie „Netflix“) und schreibt `data/usage.json`. Die oberste Reihe zeigt die 5 meistgenutzten, darunter folgt der Rest absteigend. Alte Nutzung verblasst (Halbwertszeit 45 Tage). Startreihenfolge: Netflix, Spotify, PC/HDMI 1, YouTube, Prime Video. Per langem OK lässt sich eine App oben **anheften** (bleibt vorn, verschiebbar). Zähler-Datei (überlebt Neuinstallation): `/var/lib/webosbrew/custom-launcher-usage.json` – löschen = Zähler zurücksetzen (danach Dienst neu starten).
 4. **Bloat ausgeblendet** (nichts deinstalliert): LG Channels, Gallery+, Sport, Startseiten-Hub, Kamera, Multi View, Alexa, Travel+, Gaming Portal, Public Value, ungenutzte HDMI-Eingänge, Platzhalter-Apps. Alles unter „Mehr → Ausgeblendete Apps“ wiederherstellbar.
 5. **Telnet geschlossen**: Die offene Root-Shell ohne Passwort (Port 23) ist abgeschaltet (`/var/luna/preferences/webosbrew_telnet_disabled`). SSH (nur Schlüssel) bleibt.
@@ -53,9 +53,19 @@ Auf dem TV liegt:
    - **Runter von ganz oben** (3.8.1): Von Wetter/Gemini/Audio nach unten landet der Fokus immer auf der ersten Karte links.
    - **Fokus nach Kaltstart**: webOS gibt dem frisch gestarteten Hub den Fokus erst 1–4 s nachdem er sichtbar ist (unabhängig vom Laden der Seite, gemessen). Tasten in dieser Zeit gehen verloren; daran lässt sich nichts ändern. Für den langen Fall (Minuten) protokolliert der Fokus-Wächter jede Episode einmal mit Kontext und versucht nach 4 s `activate()`, nach 10 s einen Neustart von sich selbst mit `refocus` (behält die Ansicht). `deactivate()`+`activate()` darf nicht verwendet werden: das schickt den Hub minutenlang in den Hintergrund.
 
+10. **Überarbeitung** (3.9.0, Backend 2.2.0):
+   - **Ein Menüsystem**: Jeder Menüpunkt ist Aktion (Haken für die aktuelle Wahl, Pfeil für Untermenüs), Schalter oder Regler. Helligkeit ist ein Regler statt fünf Einträgen (◀▶, gehalten in 3er-Schritten, sendet 160 ms nach der letzten Änderung, immer nur den neuesten Wert). Die eigene Farbe nutzt dieselben Regler. Alle Menüs gehen auch mit dem Zeiger.
+   - **Billboard mit Fakten**: Lampe (Helligkeit, Farbe), Raum (Geräte), Wetter (3 Tage), Eingang (Anschluss). Mehr Abstand zwischen Reihentitel und fokussierter Karte (Fokus 1,12×).
+   - **Gemini**: Linien-Icons statt Emoji, erledigte Aktionen als deutsche Etiketten, 45 s Zeitlimit mit „Erneut versuchen“.
+   - **Fehlerzustände**: Smart-Home-Server oder Wetter nicht erreichbar, keine Geräte, Gerät offline – jeweils eigene Anzeige statt endlosem „…“.
+   - **Behoben**: Pfeiltasten tot nach langem OK auf Gemini; leeres Billboard-Logo; Smart-Home-Antworten in falscher Reihenfolge machten Änderungen rückgängig; Gemini-Fenster wurde nie abgedunkelt.
+   - **Backend**: `Origin: null` nur noch vom TV selbst (vorher konnte eine Webseite im Heimnetz den TV steuern), Schutz gegen DNS-Rebinding, Zeit- und Verbindungsgrenzen; `/api/status` parallel und 1 s geteilt; „Zuletzt“-Reihenfolge der Handy-App jetzt wirklich nach Nutzung; `.env` wird sicher geschrieben; Wetter-Ort per `WEATHER_LAT`/`WEATHER_LON`/`WEATHER_TZ`.
+   - **launcherd**: Die `.off`-Datei stellt LGs Tastenfilter auch nach einem Absturz des Dienstes wieder her; Neustart von memchute mit Zeitlimit.
+   - **Tests**: `python3 -m unittest discover -s tests -p 'test_hub_*.py'` (96 Tests), GitHub Actions in `.github/workflows/ci.yml`. Vor dem ersten Einsatz am TV prüfen: Launcher-Anfragen kommen von 127.0.0.1 mit `Origin: null` (sonst 403), Lampen-Regler mit echter WiZ, Frame-Zeiten beim Billboard-Wechsel.
+
 ## Bedienung / Notausstieg
 
-LG-Startbildschirm wieder wie original (sofort, ohne Neustart):
+LG-Startbildschirm wieder wie original (innerhalb von ~5 s, ohne Neustart; greift auch, wenn `launcherd.py` vorher abgestürzt ist):
 ```bash
 ssh root@192.168.178.60 "touch /var/lib/webosbrew/custom-launcher.off"
 ```
