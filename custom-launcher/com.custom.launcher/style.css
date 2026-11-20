@@ -338,6 +338,8 @@ body.booting .reveal { opacity: 0; transform: translateY(24px); transition: none
 .tile.display .t-icon { color: #d8b4fe; background: rgba(192, 132, 252, .16); }
 .tile.display .t-state { color: #c4a3f5; }
 .tile.display.focused::after { border-color: #d8b4fe; }
+.tile.spotify:not(.on) .t-icon { color: #1ed760; background: rgba(30, 215, 96, .12); }   /* Spotify-Licht; on: the lamp colour like a lamp tile */
+.tile.spotify.offline .t-icon { color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .07); }
 
 /* launch: the chosen card comes forward, the page fades */
 .card.launching { --s: 1.24; transition: transform .32s var(--ease); }
@@ -466,6 +468,7 @@ body.menu-open #menu { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 .mi-bar.hue { background: linear-gradient(90deg, #f00, #ff0 16.67%, #0f0 33.33%, #0ff 50%, #00f 66.67%, #f0f 83.33%, #f00); }
 .mi-bar.sat { background: linear-gradient(90deg, #fff, var(--full, #f00)); }
 .mi-bar.kelvin { background: linear-gradient(90deg, #ff9f3c, #ffd9a8 45%, #fff 75%, #e6efff); }
+.mi-bar.shift { background: var(--full, linear-gradient(90deg, #0af, #f07628, #f0a)); }   /* Spotify-Licht: the cover colour turned -180..+180 deg */
 .mi.focused .mi-bar:not(.level) { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14); }
 .mi-knob { position: absolute; left: 8px; right: 8px; top: 50%; height: 0; transform: translateX(calc(var(--p, 0) * 100%)); transition: transform .12s ease-out; pointer-events: none; }
 .mi-knob b { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 0 0 3px #fff, 0 0 0 4.5px rgba(0, 0, 0, .5), 0 3px 10px rgba(0, 0, 0, .5); }

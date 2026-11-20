@@ -26,6 +26,7 @@
   const MORE = 'util:more';
   const WETTER_APP = 'app:wetteronline';
   const DISPLAY_TILE = 'sh:display';
+  const AMBIENT_TILE = 'sh:spotify';   // Spotify-Licht: a WiZ lamp takes the cover colour (backend spotify_ambient.py)
   const SAM = 'luna://com.webos.applicationManager/';
   const HB_EXEC = 'luna://org.webosbrew.hbchannel.service/exec';
   const BACKEND = 'http://127.0.0.1:8080';
@@ -126,6 +127,7 @@
     refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"/><path d="M19.5 4v5h-5"/>',
     reply: '<path d="M5 5v6.5a3 3 0 0 0 3 3h11"/><path d="M15 10.5l4 4-4 4"/>',
     news: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h6M7 14h10"/>',
+    music: '<path d="M9 18V5.5l11-2.5V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
   };
   const GEMINI_ICON = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="gmg" x1="0" y1="0" x2="1" y2="1">' +
     '<stop offset="0" stop-color="#5b8cff"/><stop offset=".55" stop-color="#a855f7"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs>' +
@@ -214,7 +216,7 @@
   /* ------------------------------------------------------------------ */
   /* Model                                                               */
   /* ------------------------------------------------------------------ */
-  const state = { apps: [], generatedAt: 0, devices: null, usage: {}, usageStamp: 0, smart: loadSmartCache() };
+  const state = { apps: [], generatedAt: 0, devices: null, usage: {}, usageStamp: 0, smart: loadSmartCache(), ambient: null };
   let items = new Map();          // id -> item (apps, inputs, utilities)
   let recentId = null;            // the app/input used last
   let favIds = [];                // item ids of the first row
@@ -395,6 +397,7 @@
       map.set('shr:' + room, { id: 'shr:' + room, kind: 'room', room, devs: inRoom, title: room, state: st,
         on: on.length > 0, offline: known && !reachable.length, lamp: lit ? lit.color : null, icon: 'room' });
     }
+    if (state.ambient) map.set(AMBIENT_TILE, ambientTile(state.ambient));
     map.set(DISPLAY_TILE, { id: DISPLAY_TILE, kind: 'display', title: 'Display aus', state: 'Musik-Modus', on: false, icon: 'moon' });
     tiles = map;
     tileIds = [...map.keys()];
@@ -755,7 +758,7 @@
     smart.ids = tileIds; smart.keys = tileIds;
     place(re.track, tileIds, k => tiles.get(k), createTile, updateTile);
     setSmartSub(re);
-    for (const k of [...els.keys()]) if ((k.startsWith('shd:') || k.startsWith('shr:')) && !tiles.has(k)) els.delete(k);
+    for (const k of [...els.keys()]) if ((k.startsWith('shd:') || k.startsWith('shr:') || k === AMBIENT_TILE) && !tiles.has(k)) els.delete(k);
     if (tileIds.join() !== before) layoutDirty = true;
     if (focusId && !els.has(focusId)) setFocus(tileIds[0] || firstId());
     else if (focusId && tiles.has(focusId) && bbKey === focusId) showBillboard(focusId, false);
@@ -975,6 +978,7 @@
         return { kicker: 'Musik-Modus', title: 'Display aus', desc: 'Nur das OLED-Panel geht aus, der Ton läuft weiter',
           keys: okLong('Ausschalten'), icon: 'moon', logo: 'icon round display', glow: 'rgb(168,85,247)' };
       }
+      if (t.kind === 'spotify') return ambientBillboard(t);
       if (t.kind === 'room') {
         const meta = t.devs.slice(0, 5).map(d => ({ dot: d.online === false ? 'off' : d.state === 'on' ? (d.color || lampOf({ kind: 'dev', dev: d })) : '',
           text: d.name + (d.online === false ? ' · nicht erreichbar' : '') }));
@@ -1225,6 +1229,7 @@
 
   function activateTile(t) {
     if (t.kind === 'display') { screenOff(); return; }
+    if (t.kind === 'spotify') { setAmbientMode(state.ambient && state.ambient.mode !== 'off' ? 'off' : (prefs.ambientMode || 'tv')); popTile(t.id); return; }
     if (t.kind === 'dev') {
       if (t.offline) { toast(t.title + ' ist gerade nicht erreichbar'); popTile(t.id, 'fail'); fetchSmartDevices(); return; }
       smartSet([t.dev], t.dev.state !== 'on', null, t.id);
@@ -1540,6 +1545,7 @@
     const t = tiles.get(id);
     if (!t) { closeMenu(); return; }
     const again = () => openTileMenu(id, menu ? menu.index : 0);
+    if (t.kind === 'spotify') { openAmbientMenu(index || 0); return; }
     if (t.kind === 'display') {
       openMenu(Object.assign(tileHead(t, 'Display aus', 'Musik-Modus · der Ton läuft weiter'), {
         hint: 'Nur das OLED-Panel geht aus. Jede Taste der Fernbedienung schaltet es wieder ein.',
@@ -1697,6 +1703,160 @@
       index: p.white && white ? entries.length - 1 : 0,
       hint: '▲▼ Regler wählen  ·  ◀▶ verstellen (halten = schneller)  ·  OK fertig' });
     menu.paint = () => menuIcon.style.setProperty('--c', shown());
+    menu.paint();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Spotify-Licht: the backend colours a WiZ lamp with the cover of the */
+  /* song that plays. The launcher only shows the state and changes the  */
+  /* settings (mode, calibration); the backend does all the work.        */
+  /* ------------------------------------------------------------------ */
+  const AMBIENT_MODES = [
+    { mode: 'off', label: 'Aus', hint: 'Lampe bleibt, wie sie ist' },
+    { mode: 'tv', label: 'Nur TV', hint: 'Spotify auf dem Fernseher' },
+    { mode: 'all', label: 'Alles', hint: 'jedes Spotify-Gerät' }
+  ];
+  const AMBIENT_SAMPLE = '#f07628';   // slider colours before any cover was seen
+  const ambientDraft = {};            // calibration values being changed: key -> {value, at}
+  let ambientTimer = 0, ambientModeSeq = 0;
+
+  const ambientModeLabel = m => (AMBIENT_MODES.find(x => x.mode === m) || AMBIENT_MODES[1]).label;
+  const ambientLit = a => (a.state === 'active' || a.state === 'preview') && /^#[0-9a-f]{6}$/i.test(a.sent || '');
+  const ambientTrouble = a => a.mode !== 'off' && (!a.login || a.state === 'login' || a.state === 'error');
+
+  function ambientStateText(a) {
+    if (a.mode === 'off') return 'Aus';
+    if (!a.login || a.state === 'login') return 'Login fehlt';
+    const s = { active: 'aktiv', preview: 'Vorschau', idle: 'wartet', lamp_off: 'Lampe aus', override: 'pausiert',
+      error: 'Problem', off: 'Aus', starting: '…' }[a.state] || '…';
+    return ambientModeLabel(a.mode) + ' · ' + s;
+  }
+
+  function ambientTile(a) {
+    return { id: AMBIENT_TILE, kind: 'spotify', title: 'Spotify-Licht', state: ambientStateText(a), on: a.mode !== 'off',
+      offline: ambientTrouble(a), lamp: ambientLit(a) ? a.sent : '#1ed760', icon: 'music' };
+  }
+
+  // one line saying what the lamp does right now (the backend's message is more specific when there is one)
+  function ambientSentence(a) {
+    if (a.mode === 'off') return 'Ausgeschaltet – die Lampe bleibt, wie sie ist';
+    if (!a.login || a.state === 'login') return a.message || 'Spotify-Login fehlt (spotify_login.py auf dem TV)';
+    if (a.state === 'active') return 'Die Lampe zeigt die Farbe des Covers';
+    if (a.state === 'preview') return 'Vorschau der Kalibrierung';
+    if (a.message) return a.message;
+    return a.mode === 'tv' ? 'Wartet auf Musik vom Fernseher' : 'Wartet auf Musik';
+  }
+
+  function ambientBillboard(t) {
+    const a = state.ambient || {};
+    const meta = [];
+    if (a.track && a.track.name) meta.push({ swatch: ambientLit(a) ? a.sent : null, text: a.track.name + (a.track.artist ? ' – ' + a.track.artist : '') });
+    if (a.lamp && a.lamp.name) meta.push({ icon: 'bulb', text: a.lamp.name });
+    if (ambientTrouble(a)) meta.push({ warn: true, text: ambientStateText(a) });
+    return { kicker: 'Smart Home · ' + (a.mode === 'off' ? 'Aus' : ambientModeLabel(a.mode)), title: 'Spotify-Licht', desc: ambientSentence(a), meta,
+      keys: [['OK', a.mode === 'off' ? 'Einschalten (' + ambientModeLabel(prefs.ambientMode || 'tv') + ')' : 'Ausschalten'],
+        [{ text: 'OK', hold: true }, 'Modus & Kalibrierung']],
+      icon: 'music', logo: 'icon round' + (t.on ? ' on' : '') + (t.offline ? ' offline' : ''), lamp: t.lamp,
+      glow: t.on ? t.lamp : 'rgb(70,78,96)' };
+  }
+
+  // poll fast only while someone looks at it
+  const ambientHot = () => focusId === AMBIENT_TILE || (mode === 'menu' && !!menu && !!menu.ambient);
+
+  async function fetchAmbient() {
+    const seq = ambientModeSeq;
+    let a;
+    try { a = await api('/api/spotify/ambient', undefined, 5000); } catch (e) { return; }   // backend down: the smart home row says so
+    if (!a || typeof a.mode !== 'string' || seq !== ambientModeSeq) return;   // older backend without the feature: no tile
+    applyAmbient(a);
+  }
+
+  function applyAmbient(a) {
+    const before = JSON.stringify(state.ambient);
+    state.ambient = a;
+    if (JSON.stringify(a) === before) return;
+    renderTiles();
+    if (mode === 'menu' && menu && menu.ambient) {   // the open menu: header only (rebuilding it would move the sliders under the user's hand)
+      $('menu-sub').textContent = ambientMenuSub();
+      if (menu.paint) menu.paint();
+    }
+  }
+
+  function setAmbientMode(m) {
+    if (!state.ambient) return;
+    if (m !== 'off') { prefs.ambientMode = m; savePrefs(); }
+    const seq = ++ambientModeSeq;                // a poll that started before this must not undo it
+    state.ambient = Object.assign({}, state.ambient, { mode: m });
+    renderTiles();
+    api('/api/spotify/ambient/mode', { mode: m }).then(a => {
+      if (seq !== ambientModeSeq) return;
+      if (a && a.success) applyAmbient(a); else throw new Error((a && a.error) || 'failed');
+    }).catch(() => {
+      toast('Spotify-Licht: Einstellung nicht gespeichert');
+      popTile(AMBIENT_TILE, 'fail');
+      ambientModeSeq++;
+      fetchAmbient();
+    });
+  }
+
+  function ambientCal(key) {
+    const d = ambientDraft[key];
+    if (d && Date.now() - d.at < 4000) return d.value;
+    const c = state.ambient && state.ambient.calibration;
+    return c && typeof c[key] === 'number' ? c[key] : { saturation: 1.4, brightness: 35, hue_shift: 0 }[key];
+  }
+
+  // slider moved: the lamp follows once the value rests a moment (no request per key press)
+  function setAmbientCal(key, value) {
+    ambientDraft[key] = { value, at: Date.now() };
+    clearTimeout(ambientTimer);
+    ambientTimer = setTimeout(() => {
+      const body = { saturation: ambientCal('saturation'), brightness: ambientCal('brightness'), hue_shift: ambientCal('hue_shift'), preview: true };
+      sendLatest('ambient', () => api('/api/spotify/ambient/calibration', body).then(a => {
+        if (a && a.success) applyAmbient(a); else toast('Kalibrierung nicht gespeichert');
+      }).catch(() => toast('Smart-Home-Server nicht erreichbar')));
+    }, 160);
+  }
+
+  // the cover colour the sliders work on, and the same after hue shift + saturation (as the backend does it)
+  function ambientBase() {
+    const a = state.ambient || {};
+    return /^#[0-9a-f]{6}$/i.test(a.color || '') ? a.color : AMBIENT_SAMPLE;
+  }
+  function ambientShifted(shift, satFactor) {
+    const hs = hexHsv(ambientBase()) || { h: 25, s: 0.85 };
+    return hsvHex(((hs.h + shift) % 360 + 360) % 360, Math.max(0, Math.min(1, hs.s * satFactor)));
+  }
+
+  function ambientMenuSub() {
+    const a = state.ambient || {};
+    return (a.lamp && a.lamp.name ? a.lamp.name + ' · ' : '') + ambientStateText(a);
+  }
+
+  function openAmbientMenu(index) {
+    if (!state.ambient) { closeMenu(); return; }
+    const again = () => openAmbientMenu(menu ? menu.index : 0);
+    const entries = AMBIENT_MODES.map(x => ({ label: x.label, hint: x.hint, on: state.ambient.mode === x.mode,
+      action: () => { setAmbientMode(x.mode); again(); } }));
+    entries.push({
+      label: 'Sättigung', slider: { min: 0, max: 300, step: 10, bar: 'sat' },
+      value: () => Math.round(ambientCal('saturation') * 100), text: v => Math.round(v) + ' %',
+      full: () => ambientShifted(ambientCal('hue_shift'), 1), change: v => setAmbientCal('saturation', v / 100)
+    });
+    entries.push({
+      label: 'Helligkeit', slider: { min: 10, max: 100, step: 5, bar: 'level' },
+      value: () => ambientCal('brightness'), text: v => Math.round(v) + ' %', change: v => setAmbientCal('brightness', v)
+    });
+    entries.push({
+      label: 'Farbton', slider: { min: -180, max: 180, step: 5, bar: 'shift' },
+      value: () => ambientCal('hue_shift'), text: v => (v > 0 ? '+' : '') + Math.round(v) + '°',
+      full: () => 'linear-gradient(90deg,' + [-180, -120, -60, 0, 60, 120, 180].map(d => ambientShifted(d, Math.max(ambientCal('saturation'), 0.6))).join(',') + ')',
+      change: v => setAmbientCal('hue_shift', v)
+    });
+    openMenu({ title: 'Spotify-Licht', sub: ambientMenuSub(), swatch: true, entries, index,
+      hint: 'Die Regler wirken sofort auf die Lampe, auch ohne Musik (10 s Vorschau).' });
+    menu.ambient = true;
+    menu.paint = () => menuIcon.style.setProperty('--c', ambientShifted(ambientCal('hue_shift'), ambientCal('saturation')));
     menu.paint();
   }
 
@@ -2034,6 +2194,7 @@
     tick();
     refreshData(false);
     fetchSmartDevices();
+    fetchAmbient();
   }
 
   // A relaunch means "Home was pressed" (launcherd redirects LG home here): start fresh at the top.
@@ -2158,6 +2319,11 @@
     if (q.smart === 'none') fake = [];
     const calls = [];
     window.__previewCalls = calls;
+    // spotify=off|login|none (none: an older backend without the feature)
+    const fakeAmbient = { mode: q.spotify === 'off' ? 'off' : 'tv', login: q.spotify !== 'login', state: q.spotify === 'off' ? 'off' : (q.spotify === 'login' ? 'login' : 'active'),
+      message: '', calibration: { saturation: 1.4, brightness: 35, hue_shift: 0 }, lamp: { id: '0a0000000002', name: 'Arbeitszimmer Fernseher Bar' },
+      is_playing: true, device: { name: 'Fernseher', type: 'TV' }, track: { id: 't', name: 'Super Rich Kids', artist: 'Frank Ocean', cover: '' },
+      color: '#f07628', sent: '#ff5a0a', active: true, override: false };
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const day = i => new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
     const WEATHER = { place: 'Musterstadt', current: { temperature_2m: 4.3, apparent_temperature: 1.2, weather_code: 2 },
@@ -2184,6 +2350,19 @@
           if (body.color) { d.color = body.color; d.kelvin = null; }
           if (body.kelvin) { d.kelvin = body.kelvin; d.color = kelvinHex(body.kelvin); }
           return { status: 'ok', state: d.state };
+        });
+      }
+      if (path.startsWith('/api/spotify/ambient')) {
+        return answer(slow || 120, () => {
+          if (q.spotify === 'none') return { error: 'Nicht gefunden' };
+          if (path.endsWith('/mode')) fakeAmbient.mode = body.mode;
+          if (path.endsWith('/calibration')) {
+            for (const k of ['saturation', 'brightness', 'hue_shift']) if (typeof body[k] === 'number') fakeAmbient.calibration[k] = body[k];
+            const hs = hexHsv(fakeAmbient.color);
+            fakeAmbient.sent = hsvHex(((hs.h + fakeAmbient.calibration.hue_shift) % 360 + 360) % 360, Math.min(1, hs.s * fakeAmbient.calibration.saturation));
+          }
+          fakeAmbient.state = fakeAmbient.mode === 'off' ? 'off' : (fakeAmbient.login ? 'active' : 'login');
+          return Object.assign(JSON.parse(JSON.stringify(fakeAmbient)), path === '/api/spotify/ambient' ? {} : { success: true });
         });
       }
       if (path === '/api/weather') return answer(slow || 120, () => (q.weather === 'error' ? { error: 'timed out' } : WEATHER));
@@ -2638,6 +2817,7 @@
     initSoundOutput();
     fetchWeather();
     fetchSmartDevices();
+    fetchAmbient();
 
     try {
       await loadApps();
@@ -2654,7 +2834,8 @@
     });
     refreshData(false);
     setInterval(() => { if (!document.hidden) loadApps().then(changed => { if (changed) requestRender(); }); }, 60000);
-    setInterval(() => { if (!document.hidden) fetchSmartDevices(); }, 20000);
+    setInterval(() => { if (!document.hidden) { fetchSmartDevices(); fetchAmbient(); } }, 20000);
+    setInterval(() => { if (!document.hidden && ambientHot()) fetchAmbient(); }, 4000);   // tile focused or its menu open
     setInterval(() => { if (!document.hidden) fetchWeather(); }, 600000);
     window.addEventListener('resize', () => { layoutDirty = true; });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutDirty = true; });
