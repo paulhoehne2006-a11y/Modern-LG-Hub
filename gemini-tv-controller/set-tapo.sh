@@ -1,7 +1,7 @@
 #!/bin/sh
 # Asks for the TP-Link (Tapo) login and stores it in .env for the local KLAP control.
 # The password is not echoed. Run from the PC (works in cmd.exe and PowerShell too):
-#   ssh -t root@192.168.178.60 sh /var/lib/webosbrew/gemini-controller/set-tapo.sh
+#   ssh -t root@<TV-IP> sh /var/lib/webosbrew/gemini-controller/set-tapo.sh
 DIR=/var/lib/webosbrew/gemini-controller
 F=$DIR/.env
 printf "Tapo E-Mail: "

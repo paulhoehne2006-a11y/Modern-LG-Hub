@@ -1,6 +1,6 @@
 # LG G4 – eigener Startbildschirm + Härtung
 
-TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@192.168.178.60`
+TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@<TV-IP>`
 
 ## Dateikarte (alles in diesem Ordner)
 
@@ -41,7 +41,7 @@ Auf dem TV liegt:
    - **Absicherung**: Der Boot-Hook startet `launcherd.py` neu, falls der Dienst abstürzt (Prüfung jede Minute), und schreibt ins Log, wenn `python3` fehlt. Pausieren deshalb über die `.off`-Datei, nicht über `launcherd.py stop`.
    - **Schnelle Rückkehr**: `launcherd.py` trägt den Launcher in zwei Keep-Alive-Listen ein (configd, nur im RAM, wird bei jedem Start erneut gesetzt): `com.webos.applicationManager.keepAliveApps` (SAM) und `com.webos.memorymanager.KeepAlive` (LGs Speicher-Manager `memchute`, der sonst unter Last den Launcher-Renderer beendet, z. B. bei offenem Spotify; Rückkehr dann ~3 s mit Ladekreis). memchute liest seine Liste nur beim Start, deshalb startet `launcherd.py` ihn einmal neu, wenn der Eintrag fehlt.
    - **Fenster nach vorn**: Mit `handlesRelaunch` muss die App ihr Fenster bei jedem `webOSRelaunch` selbst holen (`PalmSystem.activate()`), nie entprellt. Sonst bleibt nach Home kurz LG-Home und danach gar keine App im Vordergrund.
-8. **Smart Home lokal** (3.4.0): Die SmartThings-Cloud ist ersetzt durch direkte LAN-Steuerung im Backend (`localhome.py`). WiZ-Lampen laufen per UDP 38899, Tapo-Steckdosen per KLAP; die Zugangsdaten stehen als `TAPO_EMAIL`/`TAPO_PASSWORD` in der `.env` des Backends und werden bei jedem Handshake neu gelesen. Die Geräte stehen in `devices.json` und werden per MAC erkannt; ändert die Fritzbox eine IP, findet das Backend sie per Broadcast bzw. ARP-Tabelle wieder (`ip-cache.json`). Die Kacheln zeigen Zustand und Raum. Gemini schaltet einzelne Geräte, ganze Räume („Wohnzimmer aus“) und die Helligkeit. Test auf dem TV: `python3 localhome.py status`. Der alte SmartThings-Client (`smartthings.py`, `st_oauth.py`) ist entfernt; auf dem TV liegt er nur noch in `gemini-controller/backup-smartthings/`. Die alten Pfade `/api/smartthings/devices|toggle` antworten weiter (lokal), weil ältere App-Versionen darauf zurückfallen.
+8. **Smart Home lokal** (3.4.0): Die SmartThings-Cloud ist ersetzt durch direkte LAN-Steuerung im Backend (`localhome.py`). WiZ-Lampen laufen per UDP 38899, Tapo-Steckdosen per KLAP; die Zugangsdaten stehen als `TAPO_EMAIL`/`TAPO_PASSWORD` in der `.env` des Backends und werden bei jedem Handshake neu gelesen. Die Geräte stehen in `devices.json` (nur auf dem TV, nicht im Git; Vorlage `devices.example.json`) und werden per MAC erkannt; ändert die Fritzbox eine IP, findet das Backend sie per Broadcast bzw. ARP-Tabelle wieder (`ip-cache.json`). Die Kacheln zeigen Zustand und Raum. Gemini schaltet einzelne Geräte, ganze Räume („Wohnzimmer aus“) und die Helligkeit. Test auf dem TV: `python3 localhome.py status`. Der alte SmartThings-Client (`smartthings.py`, `st_oauth.py`) ist entfernt; auf dem TV liegt er nur noch in `gemini-controller/backup-smartthings/`. Die alten Pfade `/api/smartthings/devices|toggle` antworten weiter (lokal), weil ältere App-Versionen darauf zurückfallen.
 9. **Startseite im Netflix-Stil** (3.6.0): Oben stehen fest Uhr und Pills, darunter ein Billboard. Es beschreibt groß, was gerade fokussiert ist: App (mit Logo, Beschreibung, „zuletzt vor …“), Lampe (Raum, Zustand, Helligkeit), Raum, Wetter, Gemini oder Audio, mit Hintergrundlicht in der passenden Farbe. Darunter liegen Reihen: „Zuletzt & Favoriten“, Smart Home (Geräte des Hauptraums einzeln, eine Kachel pro weiterem Raum, „Display aus“) und die App-Kategorien Eingänge, Streaming, TV & Mediatheken, Musik & Gaming und Werkzeuge (`CATEGORIES` in `app.js`). Die fokussierte Reihe gleitet unter das Billboard, lange Reihen gleiten seitlich. Die fokussierte Kachel wächst, die Nachbarn rücken zur Seite. Smart-Home-Schalten ist optimistisch (die Kachel schaltet sofort), Lampen leuchten in ihrer echten Farbe.
    - **Performance**: Auf dem TV gemessen (Tasten per CDP, Frame-Zeiten per rAF). Große halbtransparente Ebenen, die beim Navigieren mitlaufen, verdoppeln die Frame-Zeit (p95 50–67 statt 17 ms). Das Hintergrundlicht ist deshalb in die (statische) obere Ebene gemalt und wechselt erst 650 ms nach dem letzten Tastendruck, wenn sich nichts mehr bewegt. Alles, was sich bewegt, läuft über transform/opacity. Im Tasten-Handler gibt es keine erzwungenen Layouts (~1 ms pro Taste). Ergebnis: p95 16,8 ms beim Durchnavigieren.
    - **Fokus-Wächter** (3.6.1): Auf dem TV beobachtet: Der Hub war sichtbar, hatte aber nicht den Tastaturfokus. Dann gibt der erste Tastendruck nur den Fokus und bewegt nichts („zweimal drücken“). Home, App-Wechsel, Schnellmenü, Toasts, Kaltstart und Neuladen lösen das nicht aus. Die Ursache ist noch offen. Der Hub holt sich den Fokus jetzt selbst zurück, wenn er sichtbar ist und ihn länger als 4 s nicht hat, ohne dass ein Overlay ihn kurz vorher genommen hat (`PalmSystem.activate()` nimmt einem offenen Schnellmenü den Fokus nicht weg). Jeder Fokuswechsel landet in einem kleinen Protokoll: `tools/cdp.sh eval 'window.__launcher.focusLog.join("\n")'` (Zeiten in UTC). Ein „focus (by key?)“ dort ist genau der verschluckte Tastendruck.
@@ -67,12 +67,14 @@ Auf dem TV liegt:
 
 LG-Startbildschirm wieder wie original (innerhalb von ~5 s, ohne Neustart; greift auch, wenn `launcherd.py` vorher abgestürzt ist):
 ```bash
-ssh root@192.168.178.60 "touch /var/lib/webosbrew/custom-launcher.off"
+ssh root@<TV-IP> "touch /var/lib/webosbrew/custom-launcher.off"
 ```
 Wieder einschalten: `rm /var/lib/webosbrew/custom-launcher.off`
 
-Neu installieren/aktualisieren: `tools/deploy.sh`
-Dienst-Status: `ssh root@192.168.178.60 "python3 /media/developer/apps/usr/palm/applications/com.custom.launcher/launcherd.py status"`
+Neu installieren/aktualisieren: `export TV_HOST=root@<TV-IP>` (einmal pro Terminal, alle Tools brauchen es), dann `tools/deploy.sh`
+
+Persönliches steht nur auf dem TV, nicht im Git: `gemini-tv-controller/devices.json` (Vorlage `devices.example.json`) und die `.env` (`TAPO_EMAIL`, `TAPO_PASSWORD`, `GEMINI_API_KEY`, `WEATHER_LAT`, `WEATHER_LON`, `WEATHER_PLACE`).
+Dienst-Status: `ssh root@<TV-IP> "python3 /media/developer/apps/usr/palm/applications/com.custom.launcher/launcherd.py status"`
 Telnet wieder erlauben: `rm /var/luna/preferences/webosbrew_telnet_disabled` + Neustart
 
 ## Bewusst offen gelassen (deine Entscheidung)

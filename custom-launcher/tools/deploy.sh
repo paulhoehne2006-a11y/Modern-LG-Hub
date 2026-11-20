@@ -4,7 +4,7 @@
 # Aborts before touching the running system if anything on the way fails.
 set -e
 cd "$(dirname "$0")/.."
-TV="${TV_HOST:-root@192.168.178.60}"
+TV="${TV_HOST:?TV_HOST setzen, z. B. export TV_HOST=root@<TV-IP>}"
 APP=/media/developer/apps/usr/palm/applications/com.custom.launcher
 HOOK=/var/lib/webosbrew/init.d/99-custom-launcher
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=8 -o LogLevel=ERROR"

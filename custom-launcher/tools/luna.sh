@@ -3,7 +3,7 @@
 # Usage:  tools/luna.sh luna://service/method '{"json":"payload"}'
 #         tools/luna.sh luna://com.webos.applicationManager/getForegroundAppInfo
 # The payload travels base64-encoded, so any JSON quoting is safe.
-TV="${TV_HOST:-root@192.168.178.60}"
+TV="${TV_HOST:?TV_HOST setzen, z. B. export TV_HOST=root@<TV-IP>}"
 uri="$1"
 payload="$2"
 [ -n "$uri" ] || { echo "usage: luna.sh luna://service/method ['{json}']" >&2; exit 2; }

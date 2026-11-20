@@ -5,3 +5,5 @@ __pycache__/
 st_tokens.json
 st_tokens.json.tmp
 .st_oauth_state
+devices.json
+ip-cache.json

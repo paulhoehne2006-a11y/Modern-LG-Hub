@@ -206,9 +206,7 @@ TOOLS_DECLARATION = [
     {
         "name": "control_smart_device",
         "description": ("Schaltet Smart-Home-Geräte im Heimnetz (WiZ-Lampen, Tapo-Steckdosen) an/aus und dimmt Lampen. "
-                        "Ein Raumname allein schaltet alle Geräte im Raum. Räume: Arbeitszimmer (Deckenlampe, Fernseher Bar, "
-                        "Steckdosen Bett und Kühlschrank), Wohnzimmer (Licht, Licht 2, Fernseher Bar 1, Fernseher Bar 2), "
-                        "Esszimmer (Essen), Büro (Licht)."),
+                        "Ein Raumname allein schaltet alle Geräte im Raum. (Räume und Geräte werden aus devices.json ergänzt.)"),
         "parameters": {
             "type": "OBJECT",
             "properties": {

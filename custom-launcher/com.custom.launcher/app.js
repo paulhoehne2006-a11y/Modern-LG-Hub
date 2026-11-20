@@ -35,7 +35,7 @@
   const SMART_CACHE_KEY = 'launcher.smart';
   const HALF_LIFE = 45 * 86400;    // usage counts fade by half every 45 days
   const FAVS = 7;                  // cards in the first row (last used + favourites)
-  const DEFAULT_ROOM = 'Arbeitszimmer';
+  const DEFAULT_ROOM = '';                 // '' = first room in devices.json
   const HOLD_MS = 600;             // long-press OK
   const IDLE_MS = 60000;           // dim after 1 min without input
   const SCREENSAVER_MS = 240000;   // pure black screensaver after 4 min without input
@@ -78,7 +78,7 @@
       'com.webos.app.homeconnect', 'com.webos.app.camera', 'com.webos.app.multiviewsettings',
       'amazon.alexa.view', 'com.lgtravel.app', 'com.twin.app.gamingportal', 'public.value'],
     order: [],
-    mainRoom: ''                   // smart home room shown device by device ('' = Arbeitszimmer)
+    mainRoom: ''                   // smart home room shown device by device ('' = first room)
   };
   const INPUT_ALIAS = { 'com.webos.app.hdmi1': 'PC' };   // the owner's PC is on HDMI 1
   const FALLBACK_DEVICES = [1, 2, 3, 4].map(n => ({
@@ -931,7 +931,7 @@
   // weather lines for the billboard (any field may be missing: open-meteo answers vary, the backend may send {error})
   function weatherInfo() {
     const w = lastWeather, cur = w && w.current, d = (w && w.daily) || {};
-    const info = { kicker: 'Wetter · Musterstadt', title: 'Wetter', desc: weatherFailed ? 'Wetterdaten gerade nicht verfügbar' : 'Wetterdaten werden geladen …', meta: [] };
+    const info = { kicker: placeName() ? 'Wetter · ' + placeName() : 'Wetter', title: 'Wetter', desc: weatherFailed ? 'Wetterdaten gerade nicht verfügbar' : 'Wetterdaten werden geladen …', meta: [] };
     if (!cur || !num(cur.temperature_2m)) return info;
     const [, desc] = WMO_MAP[cur.weather_code] || ['', 'Bewölkt'];
     info.title = Math.round(cur.temperature_2m) + '° · ' + desc;
@@ -1498,7 +1498,7 @@
   function openCardMenu(id) {
     if (id === 'hero:weather' || id === WETTER_APP) {
       openMenu({
-        title: 'Wetter', sub: 'Musterstadt', glyph: $('w-icon').dataset.icon || 'weather',
+        title: 'Wetter', sub: placeName() || 'Vorhersage', glyph: $('w-icon').dataset.icon || 'weather',
         entries: [
           { label: 'WetterOnline öffnen', hint: 'Wetter & Radar', action: () => { closeMenu(); openWeatherApp(); } },
           { label: 'Wetter aktualisieren', action: () => { closeMenu(); fetchWeather(true); } }
@@ -2160,7 +2160,7 @@
     window.__previewCalls = calls;
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const day = i => new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
-    const WEATHER = { current: { temperature_2m: 4.3, apparent_temperature: 1.2, weather_code: 2 },
+    const WEATHER = { place: 'Musterstadt', current: { temperature_2m: 4.3, apparent_temperature: 1.2, weather_code: 2 },
       daily: { time: [0, 1, 2, 3, 4].map(day), weather_code: [2, 61, 3, 0, 71], temperature_2m_max: [7.1, 6, 8.4, 9, 3],
         temperature_2m_min: [0.6, 2, 3.1, 1, -2], precipitation_probability_max: [10, 80, 35, 5, 60] } };
     previewApi = async (path, body, ms) => {
@@ -2232,10 +2232,22 @@
     if (bbKey === 'hero:weather') showBillboard(bbKey, false);
   }
 
+  // Place name comes from the backend (WEATHER_PLACE in its .env), never from this file.
+  function placeName() {
+    const p = lastWeather && lastWeather.place;
+    return typeof p === 'string' ? p.trim().slice(0, 40) : '';
+  }
+
+  function wetterOnlineUrl() {
+    const slug = placeName().toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+      .replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return 'https://www.wetteronline.de/' + (slug ? 'wetter/' + slug : '');
+  }
+
   function updateWeatherUI(data) {
     const cur = data && data.current;
     const iconEl = $('w-icon');
-    let icon = 'cloud', title = '–°', sub = weatherFailed ? 'nicht verfügbar' : 'Musterstadt';
+    let icon = 'cloud', title = '–°', sub = weatherFailed ? 'nicht verfügbar' : (placeName() || 'Wetter');
     if (cur && num(cur.temperature_2m)) {
       const hour = new Date().getHours();
       let desc;
@@ -2258,9 +2270,9 @@
   function openWeatherApp() {
     if (IS_TV) {
       const el = focusId && itemIdOf(focusId) === WETTER_APP ? els.get(focusId) : null;
-      launchId('com.webos.app.browser', 'WetterOnline', el, { target: 'https://www.wetteronline.de/wetter/musterstadt' });
+      launchId('com.webos.app.browser', 'WetterOnline', el, { target: wetterOnlineUrl() });
     } else {
-      window.open('https://www.wetteronline.de/wetter/musterstadt', '_blank');
+      window.open(wetterOnlineUrl(), '_blank');
     }
   }
 

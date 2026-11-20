@@ -1,7 +1,7 @@
 #!/bin/bash
 # Screenshot of what the TV is displaying right now (UI plane, 1920x1080 PNG).
 # Usage: tools/tvshot.sh out.png
-TV="${TV_HOST:-root@192.168.178.60}"
+TV="${TV_HOST:?TV_HOST setzen, z. B. export TV_HOST=root@<TV-IP>}"
 out="$1"
 [ -n "$out" ] || { echo "usage: tvshot.sh out.png" >&2; exit 2; }
 remote="/tmp/tvshot-$$-$RANDOM.png"

@@ -55,7 +55,7 @@ modern-lg-hub/
     ├── agent.py                 # Gemini assistant (tool calls)
     ├── tv.py                    # Local Luna bus TV controller (power, apps, screen off)
     ├── localhome.py             # Local smart home control (WiZ UDP, Tapo KLAP), replaces SmartThings
-    └── devices.json             # Smart home devices (MAC, room, name)
+    └── devices.example.json     # Template: copy to devices.json on the TV (MAC, room, name); not in git
 ```
 
 ---

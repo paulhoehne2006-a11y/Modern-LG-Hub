@@ -659,12 +659,23 @@ class HubServerTest(unittest.TestCase):
 
     def test_weather_defaults(self):
         url = server.weather_url()
-        self.assertIn("latitude=52.5200", url)
-        self.assertIn("longitude=13.4050", url)
+        self.assertIn("latitude=52.52", url)
+        self.assertIn("longitude=13.405", url)
         self.write_env("WEATHER_LAT=999\nWEATHER_TZ=$(reboot)\n")
         url = server.weather_url()
-        self.assertIn("latitude=52.5200", url)
+        self.assertIn("latitude=52.52", url)
         self.assertIn("timezone=Europe%2FBerlin", url)
+
+    def test_weather_place_from_env_only(self):
+        fake = mock.MagicMock()
+        fake.__enter__.return_value.read.return_value = b'{"current": {"temperature_2m": 3}}'
+        server._weather["data"] = None
+        with mock.patch("server.urllib.request.urlopen", return_value=fake):
+            self.assertNotIn("place", self.get("/api/weather")[1])
+            server._weather["data"] = None
+            self.write_env("WEATHER_PLACE=Musterstadt\n")
+            self.assertEqual(self.get("/api/weather")[1].get("place"), "Musterstadt")
+        server._weather["data"] = None
 
     def test_not_found_and_internal_error(self):
         self.assertEqual(self.get("/api/nope")[0], 404)

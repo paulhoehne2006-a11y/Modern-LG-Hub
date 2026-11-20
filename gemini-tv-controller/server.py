@@ -192,6 +192,9 @@ def get_weather() -> Dict[str, Any]:
                 data = json.loads(resp.read(256 * 1024).decode("utf-8"))
             if not isinstance(data, dict):
                 raise ValueError("unexpected reply")
+            place = (_env_value("WEATHER_PLACE") or "").strip()[:40]
+            if place:
+                data["place"] = place               # shown by the launcher; lives only in the TV's .env
             if data.get("current"):
                 _weather["data"], _weather["at"] = data, time.monotonic()
             return data

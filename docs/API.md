@@ -123,7 +123,7 @@ lamp); switching a device always allows a rescan after 1 min.
 ### `GET /api/weather`
 open-meteo forecast (`current` = temperature_2m, apparent_temperature, weather_code; `daily` =
 weather_code, temperature_2m_max/min, precipitation_probability_max). Location from
-`WEATHER_LAT` / `WEATHER_LON` / `WEATHER_TZ` (defaults 52.5200 / 13.4050 / Europe/Berlin). Cached
+`WEATHER_LAT` / `WEATHER_LON` / `WEATHER_TZ` (defaults 52.5200 / 13.4050 / Europe/Berlin – set your own in the TV's `.env`); `WEATHER_PLACE` adds a `place` field with the name the launcher shows (e.g. `WEATHER_PLACE=Musterstadt`). Cached
 10 min; on failure the last good forecast (up to 3 h old), else `200 {"error": "<type>: <msg>"}`.
 
 ## POST endpoints
@@ -169,11 +169,11 @@ blocked answers all come back as German `text` (never an HTTP error). The key tr
 | `GEMINI_ALLOWED_HOSTS` | extra `Host` names (comma separated), e.g. a DynDNS-free local name |
 | `TAPO_EMAIL`, `TAPO_PASSWORD` | TP-Link login for the KLAP handshake (`set-tapo.sh` writes them) |
 | `WEATHER_LAT`, `WEATHER_LON`, `WEATHER_TZ` | forecast location |
-| `HUB_GATEWAY` | router address used to find the TV's own subnet for the LAN rescan (default 192.168.178.1) |
+| `HUB_GATEWAY` | router address used to find the TV's own subnet for the LAN rescan (default: the TV's default route) |
 
 `GEMINI_PORT` / `GEMINI_BIND` are read from the process environment only. The `.env` is re-parsed
 only when it changes (cheap per request). Format: `KEY=value`, optional quotes, `export ` prefix
 and `#` comments allowed, first definition wins.
 
-`devices.json`: `{"devices": [{"mac", "kind": "wiz"|"tapo", "room", "name", "ip"}]}` – identified
+`devices.json` (only on the TV, git-ignored; start from `devices.example.json`): `{"devices": [{"mac", "kind": "wiz"|"tapo", "room", "name", "ip"}]}` – identified
 by MAC; `ip` is only a start value, learned addresses go to `ip-cache.json`. Order = tile order.

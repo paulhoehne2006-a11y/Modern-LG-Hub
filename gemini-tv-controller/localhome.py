@@ -207,15 +207,15 @@ def _device(dev_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _subnet_prefix() -> str:
-    """'a.b.c.' of the TV's own LAN address (the route towards HUB_GATEWAY, default the Fritzbox)."""
-    gw = env_value("HUB_GATEWAY") or "192.168.178.1"
+    """'a.b.c.' of the TV's own LAN address (the route towards HUB_GATEWAY, default: the default route)."""
+    gw = env_value("HUB_GATEWAY") or "1.1.1.1"   # UDP connect only picks the route, nothing is sent
     s = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect((gw, 9))                 # UDP connect sends nothing, it only picks the route
         return s.getsockname()[0].rsplit(".", 1)[0] + "."
     except Exception:
-        return gw.rsplit(".", 1)[0] + "." if _IPV4_RE.match(gw) else "192.168.178."
+        return gw.rsplit(".", 1)[0] + "." if _IPV4_RE.match(gw) and gw != "1.1.1.1" else "192.168.1."
     finally:
         if s is not None:
             s.close()
