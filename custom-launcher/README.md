@@ -1,23 +1,21 @@
 # LG G4 – eigener Startbildschirm + Härtung
 
-TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@<TV-IP>`
+TV: LG OLED G4 (webOS 10.3.1, gerootet, Homebrew Channel), `root@<TV-IP>`
 
 ## Dateikarte (alles in diesem Ordner)
 
 | Pfad | Was |
 |---|---|
-| `com.custom.launcher/` | **Die App** (Quelltext). `index.html`, `style.css`, `app.js` = Oberfläche; `launcherd.py` = Root-Hilfsdienst; `appinfo.json`, `icon.png`; `data/` nur Vorschau-Daten für den PC |
+| `com.custom.launcher/` | **Die App** (Quelltext). `index.html`, `style.css`, `app.js` = Oberfläche; `launcherd.py` = Root-Hilfsdienst; `appinfo.json`, `icon.png`; `data/` wird auf dem TV von `launcherd.py` erzeugt (bzw. lokal für die PC-Vorschau per `tools/mkdata.js`, nicht im Git) |
 | `com.custom.launcher_<version>_all.ipk` | Installationspaket, wird von `build-ipk.sh` erzeugt (nicht im Git). Aktuelle Version steht in `com.custom.launcher/appinfo.json` (3.9.0) |
 | `../gemini-tv-controller/` | Backend auf dem TV (`server.py`, Port 8080, im Heimnetz erreichbar für die Handy-App; Zugriffsmodell und alle Endpunkte in `../docs/API.md`): Gemini-Assistent, Smart-Home-Kacheln (WiZ/Tapo lokal im LAN), Wetter, OLED-aus |
-| `audit/review.md`, `audit/qa.md` | Code-Review und TV-Test der Agents (Fehlerlisten, alle wichtigen behoben) |
 | `boot/99-custom-launcher` | Boot-Hook, wird auf dem TV nach `/var/lib/webosbrew/init.d/` kopiert |
 | `build-ipk.sh` | Baut das .ipk aus `com.custom.launcher/` |
 | `tools/deploy.sh` | **Ein Befehl für alles**: bauen, installieren, Boot-Hook setzen, Dienst neu starten |
 | `tools/tv.sh`, `luna.sh`, `key.sh`, `tvshot.sh` | Hilfen: Befehl auf dem TV (mit TTY), Luna-Aufruf, Fernbedienungstaste senden, TV-Bildschirmfoto |
 | `tools/cdp.sh` | Web-Inspector des TVs: JS in der Launcher-Seite ausführen, Tasten, Screenshots |
-| `tools/localshot.sh`, `mkdata.js` | Launcher am PC in einem Headless-Chromium/Edge rendern/bedienen (Vorschau mit echten TV-Daten; findet den Browser selbst, sonst `--browser` oder `LOCALSHOT_BROWSER`) |
-| `design/fixtures/` | Vom TV kopierte Original-Icons, App-Metadaten (21 MB, nur für die PC-Vorschau). LGs Schriften sind aus Lizenzgründen nicht im Repo: Der TV hat sie eingebaut; für eine originalgetreue PC-Vorschau „LG Smart UI“ lokal installieren (vom TV: `/usr/share/fonts/`), sonst nimmt die Vorschau Ersatzschriften |
-| `audit/` | Bestandsaufnahme des TVs: `privacy.md`, `bloat.md`, `boot.md`, `research.md`, Rohdaten in `raw/`, `blocklist/` |
+| `tools/localshot.sh`, `mkdata.js` | Launcher am PC in einem Headless-Chromium/Edge rendern/bedienen (Vorschau mit eigenen lokalen TV-Daten; findet den Browser selbst, sonst `--browser` oder `LOCALSHOT_BROWSER`) |
+| `design/fixtures/`, `com.custom.launcher/data/` | Nicht im Git (lokale Dateien): vom TV exportierte App-Icons/Assets von Drittanbietern sowie LGs Systemschriften („LG Smart UI“, vom TV `/usr/share/fonts/`); auf dem PC ohne diese Dateien nutzt die Vorschau Ersatzschriften |
 | `README.md` | diese Datei |
 
 Auf dem TV liegt:
@@ -33,7 +31,7 @@ Auf dem TV liegt:
 3b. **Reihenfolge nach Nutzung** (v2.1): Der Root-Dienst zählt, welche App wie oft nach vorn kommt (auch über Fernbedienungstasten wie „Netflix“) und schreibt `data/usage.json`. Die oberste Reihe zeigt die 5 meistgenutzten, darunter folgt der Rest absteigend. Alte Nutzung verblasst (Halbwertszeit 45 Tage). Startreihenfolge: Netflix, Spotify, PC/HDMI 1, YouTube, Prime Video. Per langem OK lässt sich eine App oben **anheften** (bleibt vorn, verschiebbar). Zähler-Datei (überlebt Neuinstallation): `/var/lib/webosbrew/custom-launcher-usage.json` – löschen = Zähler zurücksetzen (danach Dienst neu starten).
 4. **Bloat ausgeblendet** (nichts deinstalliert): LG Channels, Gallery+, Sport, Startseiten-Hub, Kamera, Multi View, Alexa, Travel+, Gaming Portal, Public Value, ungenutzte HDMI-Eingänge, Platzhalter-Apps. Alles unter „Mehr → Ausgeblendete Apps“ wiederherstellbar.
 5. **Telnet geschlossen**: Die offene Root-Shell ohne Passwort (Port 23) ist abgeschaltet (`/var/luna/preferences/webosbrew_telnet_disabled`). SSH (nur Schlüssel) bleibt.
-6. **Audit** (Datenschutz, Bloat, Boot): Tracker-Domains (407) und die Werbe-/ACR-/Sprach-Dienste sind durch „Life's Good Without Spying“ bereits geblockt; Ergebnis siehe `audit/privacy.md`.
+6. **Audit** (Datenschutz, Bloat, Boot): Tracker-Domains (407) und die Werbe-/ACR-/Sprach-Dienste sind durch „Life's Good Without Spying“ bereits geblockt.
 7. **Launcher v3** (3.2.x, „Modern Minimalist“): neues Design, Smart-Home-Kacheln (SmartThings über das Backend), Wetter, Gemini-Assistent, Denon-Audio-Modus (schaltet das OLED-Panel aus, Ton läuft weiter).
    - **Home-Taste**: webOS verarbeitet sie selbst (`homeAutoLaunch` bleibt an, sonst reagiert die Fernbedienung nicht). `launcherd.py` leitet LG-Home sofort auf den Launcher um; der Launcher bekommt dann `webOSRelaunch` und springt nach oben. Zurück aus einer App behält die Position.
    - **Home-Taste direkt** (ab 3.3.2): Der Compositor (`surface-manager`) lädt seine Tastenfilter aus configd `com.webos.surfacemanager.keyFilters` und lädt sie bei Änderung live neu. `launcherd.py` erzeugt aus LGs eigener `KeyFilters/systemUi.js` eine Kopie (`/var/lib/webosbrew/custom-launcher-keyfilter/systemUi.js`), in der nur `launchDefaultApp(home)` durch den Start des Launchers ersetzt ist, und lässt die Filter-Einträge darauf zeigen. Damit startet Home LG-Home gar nicht erst (kein Aufblitzen, Hub nach ~0,15 s). Nur im RAM: ein Neustart, die `.off`-Datei oder `launcherd.py stop` stellen LGs Original wieder her. Erkennt `launcherd.py` die Zeile nach einem Firmware-Update nicht, bleibt alles beim Original und die Umleitung greift wie bisher.

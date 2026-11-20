@@ -32,7 +32,7 @@ Designed for pure speed, zero bloat, elegant dark aesthetics, and seamless hardw
   - Lightweight Python backend server running locally on the TV.
 
 - **🛡️ Hardened & Privacy-First**
-  - Adware, analytics, and telemetry domains blocked (via the "Life's Good Without Spying" Homebrew app, see `custom-launcher/audit/privacy.md`).
+  - Adware, analytics, and telemetry domains blocked (via the "Life's Good Without Spying" Homebrew app).
   - Insecure telnet daemon disabled by default; secure SSH key authentication only.
 
 ---
@@ -48,8 +48,7 @@ modern-lg-hub/
 │   │   ├── index.html           # Minimal DOM layout
 │   │   └── launcherd.py         # Root event daemon for Home interception & app sync
 │   ├── boot/                    # Boot-time init.d autostart scripts
-│   ├── tools/                   # Deployment, CDP debugging & automation tools
-│   └── audit/                   # Security, boot chain, and bloat audit reports
+│   └── tools/                   # Deployment, CDP debugging & automation tools
 └── gemini-tv-controller/        # Local Python REST backend & AI assistant
     ├── server.py                # REST API (port 8080, LAN) for launcher + phone app, see docs/API.md
     ├── agent.py                 # Gemini assistant (tool calls)
