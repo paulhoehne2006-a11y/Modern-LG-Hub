@@ -7,3 +7,7 @@ st_tokens.json.tmp
 .st_oauth_state
 devices.json
 ip-cache.json
+spotify-token.json
+spotify-token.json.*
+spotify-ambient.json
+spotify-ambient.json.*
