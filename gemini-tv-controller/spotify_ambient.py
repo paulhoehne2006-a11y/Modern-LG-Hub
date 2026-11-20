@@ -39,12 +39,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(HERE, "spotify-ambient.json")
 API = spotify_login.API
 
-POLL_PLAYING = 4.0        # s between player polls while something plays
-POLL_IDLE = 5.0           # s between polls while nothing plays
+POLL_PLAYING = 1.5        # s between player polls while something plays
+POLL_IDLE = 2.5           # s between polls while nothing plays
 POLL_LAMP_OFF = 30.0      # s between lamp checks while music plays but the lamp is off
 PAUSE_GRACE = 6.0         # s of pause/stop before the lamp goes back
-FADE_STEPS = 10
-FADE_TIME = 1.0           # s for a song-change fade
+FADE_STEPS = 5
+FADE_TIME = 0.35           # s for a song-change fade
 PREVIEW_HOLD = 10.0       # s a calibration preview stays on the lamp when nothing plays
 NO_NET_RESTORE = 60.0     # s without internet before the lamp goes back
 BACKOFF = (5, 10, 20, 40, 60)   # s after network errors
