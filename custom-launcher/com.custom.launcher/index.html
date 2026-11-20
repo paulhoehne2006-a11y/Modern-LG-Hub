@@ -44,6 +44,7 @@
               <div id="bb-kicker"></div>
               <div id="bb-title"></div>
               <div id="bb-desc"></div>
+              <div id="bb-meta"></div>
               <div id="bb-keys"></div>
             </div>
             <div id="bb-logo"><img alt="" draggable="false"><span class="bb-icon"></span></div>
@@ -69,10 +70,10 @@
     <div class="gm-backdrop" id="gemini-backdrop"></div>
     <div class="gm-shell">
       <header class="gm-top">
-        <div class="gm-brand"><span class="gm-spark">✦</span><span class="gm-name">Gemini</span></div>
+        <div class="gm-brand"><span class="gm-spark" id="gm-spark"></span><span class="gm-name">Gemini</span></div>
         <div class="gm-top-right">
-          <span class="gm-keyhint">🎙 Mikro-Taste oder Zurück schließt</span>
-          <button id="gemini-close-btn" class="gm-close" tabindex="-1" aria-label="Schließen">✕</button>
+          <span class="gm-keyhint"><b class="gm-cap" id="gm-mic"></b>Mikro-Taste oder <b class="gm-cap">Zurück</b> schließt</span>
+          <button id="gemini-close-btn" class="gm-close" tabindex="-1" aria-label="Schließen"></button>
         </div>
       </header>
       <main id="gemini-chat" class="gm-chat" aria-live="polite"></main>

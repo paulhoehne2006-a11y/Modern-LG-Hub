@@ -99,7 +99,6 @@
     room: '<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>',
     speaker: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
     headphones: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4.5" height="7" rx="1.5"/><rect x="16.5" y="14" width="4.5" height="7" rx="1.5"/>',
-    play: '<path d="M7 4.5v15l13-7.5z"/>',
     // weather
     sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
     night: '<path d="M19 14.2A7.5 7.5 0 1 1 9.8 5a6 6 0 0 0 9.2 9.2z"/>',
@@ -108,7 +107,25 @@
     fog: '<path d="M4 8.5h16M2.5 12.5h19M5 16.5h14"/>',
     rain: CLOUD_HI + '<path d="M8.5 17.5l-1 2.5M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5"/>',
     snow: CLOUD_HI + '<path d="M8 18.5v.01M12 18v.01M16 18.5v.01M10 21v.01M14 21v.01" stroke-width="2.6"/>',
-    storm: CLOUD_HI + '<path d="M12.8 15.5 10.6 19h3l-2 3"/>'
+    storm: CLOUD_HI + '<path d="M12.8 15.5 10.6 19h3l-2 3"/>',
+    // menus and Gemini (same 24px line style; no emoji anywhere in the UI)
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    chevron: '<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
+    close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+    film: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7.5 4.5v15M16.5 4.5v15M3 9h4.5M3 15h4.5M16.5 9H21M16.5 15H21"/>',
+    spark: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
+    smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5v.01M15 9.5v.01" stroke-width="2.4"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    shirt: '<path d="M8.5 3.5 3 6.5l2 4.5 2-1V20.5h10V10l2 1 2-4.5-5.5-3a3.5 3.5 0 0 1-7 0z"/>',
+    walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2.5-6 2.5 2.5V21M8.5 11.5l2.5-3.5 3 1 2 3 2.5 1M11 8l-1 6"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    dice: '<rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8.5 8.5v.01M15.5 8.5v.01M12 12v.01M8.5 15.5v.01M15.5 15.5v.01" stroke-width="2.6"/>',
+    pan: '<circle cx="10" cy="13" r="6.5"/><path d="M16 11.5l5.5-3"/><path d="M8 11.5a2.5 2.5 0 0 1 2.5-2" />',
+    brain: '<path d="M9 4.5a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 .5V6a2.5 2.5 0 0 0-3-1.5zM15 4.5a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 .5"/>',
+    refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"/><path d="M19.5 4v5h-5"/>',
+    reply: '<path d="M5 5v6.5a3 3 0 0 0 3 3h11"/><path d="M15 10.5l4 4-4 4"/>',
+    news: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h6M7 14h10"/>',
   };
   const GEMINI_ICON = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="gmg" x1="0" y1="0" x2="1" y2="1">' +
     '<stop offset="0" stop-color="#5b8cff"/><stop offset=".55" stop-color="#a855f7"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs>' +
@@ -163,7 +180,9 @@
   const rootExec = command => luna(HB_EXEC, { command });
 
   // backend call with a timeout; resolves to the parsed JSON (also for HTTP errors with a JSON body)
+  let previewApi = null, previewNoApps = false;   // PC preview only (see the end of the file)
   function api(path, body, ms) {
+    if (!IS_TV && previewApi) return previewApi(path, body, ms);
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), ms || 6000) : 0;
     const opts = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -202,7 +221,7 @@
   let rows = [];                  // [{key, title, type: 'cards'|'tiles', ids, keys}]
   let tileIds = [];
   let tiles = new Map();          // id -> smart home tile item
-  let smartSummary = '';
+  let smartSummary = '', smartWarn = false;
 
   // "Spotify – Musik und Podcasts" -> "Spotify" (store titles carry slogans)
   function shortTitle(t) {
@@ -222,7 +241,7 @@
       let title = d.label || port, sub = port;
       if (isDefaultLabel && INPUT_ALIAS[d.appId]) title = INPUT_ALIAS[d.appId];
       else if (isDefaultLabel) sub = d.unknown ? 'Eingang' : (d.connected ? 'Verbunden' : 'Nicht verbunden');
-      map.set(d.appId, { id: d.appId, kind: 'input', title, sub, connected: !!d.connected, glyph: title === 'PC' ? 'pc' : 'hdmi' });
+      map.set(d.appId, { id: d.appId, kind: 'input', title, sub, connected: !!d.connected, unknown: !!d.unknown, glyph: title === 'PC' ? 'pc' : 'hdmi' });
     }
     map.set(LIVE_TV, { id: LIVE_TV, kind: 'input', title: 'Live TV', sub: 'TV-Empfang', connected: false, glyph: 'tv', noDot: true });
     for (const a of state.apps) {
@@ -232,7 +251,7 @@
         icon: a.icon ? a.icon + '?v=' + (a.iconV || 0) : null, iconColor: a.iconColor || null });
     }
     map.set(WETTER_APP, { id: WETTER_APP, kind: 'util', title: 'WetterOnline', sub: 'Wetter & Radar', glyph: 'weather' });
-    map.set(MORE, { id: MORE, kind: 'util', title: 'Mehr', sub: 'Apps verwalten', glyph: 'more' });
+    map.set(MORE, { id: MORE, kind: 'util', title: 'Mehr', sub: 'Apps & Einstellungen', glyph: 'more' });
     return map;
   }
 
@@ -296,15 +315,27 @@
   function loadSmartCache() {
     try {
       const c = JSON.parse(localStorage.getItem(SMART_CACHE_KEY));
-      if (Array.isArray(c) && c.length) return c.map(d => Object.assign({}, d, { online: null }));   // state is old: shown as "…" until fresh
+      if (Array.isArray(c)) return normDevices(c).map(d => Object.assign(d, { online: null }));   // state is old: shown as "…" until fresh
     } catch (e) { /* ignore */ }
     return null;
   }
+  // only entries the UI can work with (anything odd from the backend is dropped instead of breaking a render)
+  function normDevices(list) {
+    return list.filter(d => d && typeof d === 'object' && typeof d.id === 'string' && d.id).map(d => Object.assign({}, d, {
+      name: typeof d.name === 'string' && d.name.trim() ? d.name : d.id,
+      room: typeof d.room === 'string' && d.room.trim() ? d.room : 'Weitere Geräte',
+      capabilities: Array.isArray(d.capabilities) ? d.capabilities : []
+    }));
+  }
 
   const pending = new Map();      // mac -> {state, brightness, until}: optimistic state while a command runs
+  // backend health for the smart home row: 'wait' (no answer yet), 'ok', 'down' (the last 2+ polls failed)
+  let smartFails = 0, smartFresh = false;
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 
+  // null = no answer and no cache yet (show the built-in list), [] = the backend has no devices
   function smartDevices() {
-    const list = (state.smart && state.smart.length) ? state.smart : SMART_FALLBACK;
+    const list = state.smart ? state.smart : SMART_FALLBACK;
     const now = Date.now();
     return list.map(d => {
       const p = pending.get(d.id);
@@ -325,11 +356,23 @@
     return rooms.includes(DEFAULT_ROOM) ? DEFAULT_ROOM : (rooms[0] || '');
   }
 
+  // state of unknown freshness: "…" while waiting for the first answer, "–" while the backend is down
+  const unknownState = () => (smartFails >= 2 ? '–' : '…');
+
   function deviceState(d) {
     if (d.online === false) return 'Nicht erreichbar';
-    if (d.online == null && !pending.has(d.id)) return '…';
+    if (d.online == null && !pending.has(d.id)) return unknownState();
     if (d.state !== 'on') return 'Aus';
-    return d.type === 'light' && typeof d.brightness === 'number' ? 'An · ' + d.brightness + ' %' : 'An';
+    return d.type === 'light' && typeof d.brightness === 'number' ? 'An · ' + Math.round(d.brightness) + ' %' : 'An';
+  }
+
+  // human name of a lamp's colour: "Warmweiß", "2900 K", "Rot", "Eigene Farbe"
+  function toneName(d) {
+    if (!d || d.state !== 'on') return '';
+    const preset = TONES.find(x => toneIs(d, x));
+    if (preset) return preset.label;
+    if (d.kelvin) return Math.round(d.kelvin / 100) * 100 + ' K';
+    return typeof d.color === 'string' && /^#[0-9a-f]{6}$/i.test(d.color) ? 'Eigene Farbe' : '';
   }
 
   function buildTiles() {
@@ -345,17 +388,24 @@
       const inRoom = devs.filter(x => x.room === room);
       const on = inRoom.filter(x => x.state === 'on' && x.online !== false);
       const known = inRoom.some(x => x.online != null || pending.has(x.id));
+      const reachable = inRoom.filter(x => x.online !== false);
       const lit = on.find(x => x.color);
-      map.set('shr:' + room, { id: 'shr:' + room, kind: 'room', room, devs: inRoom, title: room,
-        state: !known ? '…' : (on.length ? on.length + ' von ' + inRoom.length + ' an' : 'Alles aus'),
-        on: on.length > 0, offline: false, lamp: lit ? lit.color : null, icon: 'room' });
+      let st = !known ? unknownState() : (on.length ? on.length + ' von ' + inRoom.length + ' an' : 'Alles aus');
+      if (known && !reachable.length) st = 'Nicht erreichbar';
+      map.set('shr:' + room, { id: 'shr:' + room, kind: 'room', room, devs: inRoom, title: room, state: st,
+        on: on.length > 0, offline: known && !reachable.length, lamp: lit ? lit.color : null, icon: 'room' });
     }
     map.set(DISPLAY_TILE, { id: DISPLAY_TILE, kind: 'display', title: 'Display aus', state: 'Musik-Modus', on: false, icon: 'moon' });
     tiles = map;
     tileIds = [...map.keys()];
     const mainDevs = devs.filter(x => x.room === main);
     const onCount = mainDevs.filter(x => x.state === 'on' && x.online !== false).length;
-    smartSummary = main ? main + ' · ' + (onCount ? onCount + (onCount === 1 ? ' Gerät' : ' Geräte') + ' an' : 'alles aus') : '';
+    smartWarn = false;
+    if (smartFails >= 2 && !smartFresh) { smartSummary = 'Smart-Home-Server nicht erreichbar'; smartWarn = true; }
+    else if (smartFails >= 2) { smartSummary = 'Keine Verbindung · Stand von vorhin'; smartWarn = true; }
+    else if (!devs.length) smartSummary = 'Keine Geräte eingerichtet';
+    else if (!smartFresh && !pending.size) smartSummary = main;   // cached or built-in list: nothing known yet
+    else smartSummary = main ? main + ' · ' + (onCount ? plural(onCount, 'Gerät', 'Geräte') + ' an' : 'alles aus') : '';
   }
 
   /* ------------------------------------------------------------------ */
@@ -506,6 +556,7 @@
     el.addEventListener('click', () => {
       if (pointerLong) { pointerLong = false; return; }
       if (mode === 'home') activate(key());
+      else if (mode === 'move') endMove();         // the pointer has no arrow keys: a click finishes moving
     });
   }
 
@@ -667,7 +718,7 @@
       if (scrollerEl.children[i] !== re.section) scrollerEl.insertBefore(re.section, scrollerEl.children[i] || null);
       if (r.type === 'tiles') {
         place(re.track, r.keys, k => tiles.get(k), createTile, updateTile);
-        re.sub.textContent = smartSummary;
+        setSmartSub(re);
       } else {
         place(re.track, r.keys, k => items.get(itemIdOf(k)), createCard, updateCard);
         re.sub.textContent = r.key === 'favs' ? '' : String(r.ids.length);
@@ -687,7 +738,12 @@
     // later and re-sorts the row (the old first app would otherwise drag the focus to its new place)
     if (homeStartUntil > Date.now()) key = firstId();
     else if (!key || !els.has(key)) key = (key && findKey(itemIdOf(key))) || firstId();
-    setFocus(key, { instant: !focusId, keepScroll: true });
+    setFocus(key, { instant: !focusId });
+  }
+
+  function setSmartSub(re) {
+    re.sub.textContent = smartSummary;
+    re.sub.classList.toggle('warn', smartWarn);
   }
 
   function renderTiles() {
@@ -698,7 +754,7 @@
     if (!smart || !re) return;
     smart.ids = tileIds; smart.keys = tileIds;
     place(re.track, tileIds, k => tiles.get(k), createTile, updateTile);
-    re.sub.textContent = smartSummary;
+    setSmartSub(re);
     for (const k of [...els.keys()]) if ((k.startsWith('shd:') || k.startsWith('shr:')) && !tiles.has(k)) els.delete(k);
     if (tileIds.join() !== before) layoutDirty = true;
     if (focusId && !els.has(focusId)) setFocus(tileIds[0] || firstId());
@@ -722,7 +778,7 @@
   let geom = [];                 // per navigable row: {top, xs, ws, maxScroll}
   let scrollY = 0;
   let pushedRow = null;          // row element whose cards are currently pushed aside
-  const PUSH = { cards: 30, tiles: 16 };
+  const PUSH = { cards: 26, tiles: 14 };
 
   // navigable rows: the pills on top, then the card/tile rows
   const navRows = () => [{ key: 'pills', type: 'pills', keys: PILLS.map(p => p[0]) }, ...rows];
@@ -741,7 +797,8 @@
       const xs = kids.map(k => k.offsetLeft), ws = kids.map(k => k.offsetWidth);
       const last = kids[kids.length - 1];
       const trackW = last ? last.offsetLeft + last.offsetWidth - SIDE : 0;   // offsetLeft includes the track padding (SIDE)
-      return { top: re ? re.section.offsetTop : 0, xs, ws, maxScroll: r.type === 'cards' ? Math.max(0, trackW - (VIEW_W - 2 * SIDE)) : 0 };
+      const over = trackW - (VIEW_W - 2 * SIDE);   // tiles slide too when there are many devices (flex rounding: ignore < 4 px)
+      return { top: re ? re.section.offsetTop : 0, xs, ws, maxScroll: over > 4 ? over : 0 };
     });
   }
 
@@ -775,7 +832,7 @@
       layoutRow(pos, opts.instant);
       scrollToRow(pos.r, opts.instant);
     }
-    if (opts.instant || !bbKey) { showBillboard(key, false); scheduleGlow(true); }
+    if (opts.instant || !bbKey) { showBillboard(key, false); applyGlow(); }
     else scheduleBillboard(key);   // the colour light changes together with the billboard text (fillBillboard)
   }
 
@@ -794,7 +851,7 @@
       if (k.dataset.dx !== dx) { k.style.setProperty('--dx', dx + 'px'); k.dataset.dx = dx; }
     });
     const g = geom[pos.r];
-    if (pos.row.type === 'cards' && g) {
+    if (g) {
       const x = Math.max(0, Math.min(g.maxScroll, g.xs[pos.c] - SIDE));
       if (x !== re.scrollX || instant) {
         re.scrollX = x;
@@ -867,20 +924,45 @@
     return !!m && Math.max(+m[1], +m[2], +m[3]) - Math.min(+m[1], +m[2], +m[3]) < 40;
   }
 
+  const WEEKDAY = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const num = v => typeof v === 'number' && isFinite(v);
+  const at = (arr, i) => (Array.isArray(arr) && num(arr[i]) ? arr[i] : null);
+
+  // weather lines for the billboard (any field may be missing: open-meteo answers vary, the backend may send {error})
+  function weatherInfo() {
+    const w = lastWeather, cur = w && w.current, d = (w && w.daily) || {};
+    const info = { kicker: 'Wetter · Musterstadt', title: 'Wetter', desc: weatherFailed ? 'Wetterdaten gerade nicht verfügbar' : 'Wetterdaten werden geladen …', meta: [] };
+    if (!cur || !num(cur.temperature_2m)) return info;
+    const [, desc] = WMO_MAP[cur.weather_code] || ['', 'Bewölkt'];
+    info.title = Math.round(cur.temperature_2m) + '° · ' + desc;
+    const lo = at(d.temperature_2m_min, 0), hi = at(d.temperature_2m_max, 0), rain = at(d.precipitation_probability_max, 0);
+    const parts = [];
+    if (lo != null && hi != null) parts.push('Heute ' + Math.round(lo) + '° bis ' + Math.round(hi) + '°');
+    if (rain != null) parts.push(Math.round(rain) + ' % Regenrisiko');
+    if (num(cur.apparent_temperature) && Math.abs(cur.apparent_temperature - cur.temperature_2m) >= 2) parts.push('gefühlt ' + Math.round(cur.apparent_temperature) + '°');
+    info.desc = parts.join(' · ');
+    const days = Array.isArray(d.time) ? d.time : [];
+    for (let i = 1; i <= 3; i++) {
+      const dl = at(d.temperature_2m_min, i), dh = at(d.temperature_2m_max, i);
+      if (dl == null || dh == null) break;
+      const date = days[i] ? new Date(days[i] + 'T12:00:00') : new Date(Date.now() + i * 86400000);
+      const name = i === 1 ? 'Morgen' : (WEEKDAY[date.getDay()] || '');
+      info.meta.push({ icon: (WMO_MAP[at(d.weather_code, i)] || ['cloud'])[0], text: name + '  ' + Math.round(dl) + '° / ' + Math.round(dh) + '°' });
+    }
+    if (weatherFailed) info.meta.push({ warn: true, text: 'Stand von vorhin' });
+    return info;
+  }
+
   function billboardInfo(key) {
-    const okLong = (ok, long) => [['OK', ok]].concat(long ? [['Lang drücken', long]] : []);
+    const OK = 'OK', HOLD = { text: 'OK', hold: true };
+    const okLong = (ok, long) => [[OK, ok]].concat(long ? [[HOLD, long]] : []);
     if (key === 'hero:weather') {
-      const w = lastWeather, cur = w && w.current, d = w && w.daily;
-      const [, desc] = (cur && WMO_MAP[cur.weather_code]) || ['', ''];
-      let line = 'Wetterdaten werden geladen …';
-      if (d && d.temperature_2m_max) line = 'Heute ' + Math.round(d.temperature_2m_min[0]) + '° bis ' + Math.round(d.temperature_2m_max[0]) + '°, ' +
-        (d.precipitation_probability_max[0] || 0) + ' % Regenrisiko';
-      return { kicker: 'Wetter · Musterstadt', title: cur ? Math.round(cur.temperature_2m) + '° · ' + desc : 'Wetter', desc: line,
-        keys: okLong('WetterOnline öffnen'), icon: $('w-icon').dataset.icon || 'cloud', logo: 'icon weather', glow: 'rgb(60,150,255)' };
+      return Object.assign(weatherInfo(), { keys: okLong('WetterOnline öffnen'), icon: $('w-icon').dataset.icon || 'cloud',
+        logo: 'icon weather', glow: 'rgb(60,150,255)' });
     }
     if (key === 'hero:gemini') {
       return { kicker: 'KI-Assistent', title: 'Gemini', desc: 'Filmtipps, Wetter, Wissen – und TV und Licht per Sprache steuern',
-        keys: [['OK', 'Öffnen'], ['🎙', 'Mikro-Taste']], iconHtml: GEMINI_ICON, logo: 'icon gemini', glow: 'rgb(139,92,246)' };
+        keys: [[OK, 'Öffnen'], [{ icon: 'mic' }, 'Mikro-Taste']], iconHtml: GEMINI_ICON, logo: 'icon gemini', glow: 'rgb(139,92,246)' };
     }
     if (key === 'hero:audio') {
       return { kicker: 'Audioausgabe', title: $('audio-title').textContent, desc: $('audio-sub').textContent,
@@ -890,18 +972,31 @@
     if (t) {
       const lamp = lampOf(t);
       if (t.kind === 'display') {
-        return { kicker: 'Denon Musik-Modus', title: 'Display aus', desc: 'Nur das OLED-Panel geht aus, der Ton läuft weiter',
+        return { kicker: 'Musik-Modus', title: 'Display aus', desc: 'Nur das OLED-Panel geht aus, der Ton läuft weiter',
           keys: okLong('Ausschalten'), icon: 'moon', logo: 'icon round display', glow: 'rgb(168,85,247)' };
       }
       if (t.kind === 'room') {
-        return { kicker: 'Raum · ' + t.devs.length + ' Geräte', title: t.title, desc: t.state,
-          keys: okLong(t.on ? 'Alles ausschalten' : 'Alles einschalten', 'Einzelne Geräte'),
-          icon: 'room', logo: 'icon round' + (t.on ? ' on' : ''), lamp, glow: t.on ? lamp : 'rgb(70,78,96)' };
+        const meta = t.devs.slice(0, 5).map(d => ({ dot: d.online === false ? 'off' : d.state === 'on' ? (d.color || lampOf({ kind: 'dev', dev: d })) : '',
+          text: d.name + (d.online === false ? ' · nicht erreichbar' : '') }));
+        if (t.devs.length > 5) meta.push({ text: '+' + (t.devs.length - 5) });
+        return { kicker: 'Raum · ' + plural(t.devs.length, 'Gerät', 'Geräte'), title: t.title, desc: t.state, meta,
+          keys: t.offline ? okLong('Erneut prüfen', 'Einzelne Geräte') : okLong(t.on ? 'Alle ausschalten' : 'Alle einschalten', 'Einzelne Geräte'),
+          icon: 'room', logo: 'icon round' + (t.on ? ' on' : '') + (t.offline ? ' offline' : ''), lamp, glow: t.on ? lamp : 'rgb(70,78,96)' };
       }
-      const light = t.dev.type === 'light', caps = t.dev.capabilities || [];
+      const d = t.dev, light = d.type === 'light', caps = d.capabilities || [];
       const tune = caps.includes('color') || caps.includes('white') ? 'Farbe & Helligkeit' : 'Helligkeit';
-      return { kicker: t.dev.room + ' · ' + (light ? 'Licht' : 'Steckdose'), title: t.title, desc: t.state,
-        keys: okLong(t.dev.state === 'on' ? 'Ausschalten' : 'Einschalten', light ? tune : 'Optionen'),
+      const meta = [];
+      let desc = t.state;
+      if (t.offline) { desc = 'Nicht erreichbar'; meta.push({ warn: true, text: 'Strom und WLAN prüfen' }); }
+      else if (t.state === '…' || t.state === '–') desc = t.state === '–' ? 'Zustand unbekannt' : 'Zustand wird geladen …';
+      else if (d.state === 'on') {
+        desc = 'Eingeschaltet';
+        if (light && num(d.brightness)) meta.push({ level: d.brightness / 100, text: Math.round(d.brightness) + ' %' });
+        const tone = light ? toneName(d) : '';
+        if (tone) meta.push({ swatch: d.kelvin ? kelvinHex(d.kelvin) : d.color, text: tone });
+      } else desc = 'Ausgeschaltet';
+      return { kicker: d.room + ' · ' + (light ? 'Licht' : 'Steckdose'), title: t.title, desc, meta,
+        keys: okLong(t.offline ? 'Erneut prüfen' : (t.state === '…' || t.state === '–') ? 'Ein/Aus' : d.state === 'on' ? 'Ausschalten' : 'Einschalten', light ? tune : 'Optionen'),
         icon: t.icon, logo: 'icon round' + (t.on ? ' on' : '') + (t.offline ? ' offline' : ''), lamp, glow: t.on ? lamp : 'rgb(70,78,96)' };
     }
     const it = items.get(itemIdOf(key));
@@ -914,8 +1009,15 @@
     if (it.id === recentId && t0) kicker = 'Zuletzt geöffnet · ' + ago(t0);
     else if (pinned) kicker = 'Angeheftet' + (t0 ? ' · zuletzt ' + ago(t0) : '');
     else if (t0) kicker = kicker + ' · zuletzt ' + ago(t0);
-    const desc = APP_DESC[it.id] || (it.kind === 'input' ? (it.connected ? 'Verbunden · ' : 'Nicht verbunden · ') + (it.id.replace(/\D/g, '') ? 'HDMI ' + it.id.replace(/\D/g, '') : '') : '');
-    const info = { kicker, title: it.title, desc, keys: okLong(it.kind === 'input' ? 'Umschalten' : 'Öffnen', 'Optionen'),
+    const port = it.id.replace(/\D/g, '');
+    let desc = APP_DESC[it.id] || '';
+    const meta = [];
+    if (it.kind === 'input' && !it.noDot) {
+      desc = desc || (it.unknown ? 'Eingang' : it.connected ? 'Gerät verbunden' : 'Kein Gerät verbunden');
+      meta.push({ dot: it.connected ? '#34c759' : '', text: port ? 'HDMI ' + port : 'Eingang' });
+    }
+    if (it.kind === 'app' && it.fullTitle && it.fullTitle !== it.title && !APP_DESC[it.id]) desc = it.fullTitle;
+    const info = { kicker, title: it.title, desc, meta, keys: okLong(it.kind === 'input' ? 'Umschalten' : 'Öffnen', 'Optionen'),
       glow: (el && el.dataset.amb) || 'rgb(110,120,140)' };
     if (it.kind === 'app' && it.icon && el) {
       const mode = ['bleed', 'glyph', 'badge'].find(c => el.classList.contains(c)) || 'badge';
@@ -931,11 +1033,35 @@
     $('bb-kicker').textContent = info.kicker || '';
     $('bb-title').textContent = info.title || '';
     $('bb-desc').textContent = info.desc || '';
+    const meta = $('bb-meta');
+    meta.textContent = '';
+    for (const m of info.meta || []) {
+      const c = h('span', 'bb-chip' + (m.warn ? ' warn' : ''));
+      if (m.icon) c.insertAdjacentHTML('beforeend', '<span class="bb-chip-ico">' + svg(m.icon) + '</span>');
+      if (m.dot !== undefined) {
+        const dot = h('i', 'bb-dot' + (m.dot === 'off' ? ' bad' : m.dot ? ' on' : ''));
+        if (m.dot && m.dot !== 'off') dot.style.setProperty('--dc', m.dot);
+        c.appendChild(dot);
+      }
+      if (m.swatch) { const sw = h('i', 'bb-swatch'); sw.style.setProperty('--dc', m.swatch); c.appendChild(sw); }
+      if (m.level != null) {
+        const bar = h('i', 'bb-level');
+        const fill = h('b', '');
+        fill.style.setProperty('--p', Math.max(0.04, Math.min(1, m.level)).toFixed(3));
+        bar.appendChild(fill);
+        c.appendChild(bar);
+      }
+      c.appendChild(document.createTextNode(m.text || ''));
+      meta.appendChild(c);
+    }
     const keys = $('bb-keys');
     keys.textContent = '';
     for (const [k, label] of info.keys || []) {
       const s = h('span', 'bb-key');
-      s.appendChild(h('b', '', k));
+      const cap = h('b', typeof k === 'object' && k.hold ? 'hold' : '');
+      if (typeof k === 'object' && k.icon) { cap.className = 'icon'; cap.innerHTML = svg(k.icon); }
+      else cap.textContent = typeof k === 'object' ? k.text : k;
+      s.appendChild(cap);
       s.appendChild(document.createTextNode(label));
       keys.appendChild(s);
     }
@@ -948,24 +1074,18 @@
       if (img.getAttribute('src') !== info.img) img.src = info.img;
       img.style.display = '';
       ic.innerHTML = '';
+      ic.dataset.html = '';
     } else {
       img.style.display = 'none';
       const html = info.iconHtml || svg(info.icon);
       if (ic.dataset.html !== html) { ic.innerHTML = html; ic.dataset.html = html; }
     }
-    scheduleGlow(true);   // colour light changes together with the text (it used to wait 650 ms: felt late)
+    applyGlow();   // colour light changes together with the text (it used to wait 650 ms: felt late)
   }
 
-  // The colour light is painted into static backgrounds (#page, #fixed, #fixed-fade), never into a layer
-  // that moves. Repainting it costs the TV a frame or two, so it changes only once per billboard swap
-  // (when the text is faded out), not on every key press.
-  const GLOW_REST_MS = 650;
-  let glowTimer = 0;
-  function scheduleGlow(now) {
-    clearTimeout(glowTimer);
-    if (now) { applyGlow(); return; }
-    glowTimer = setTimeout(applyGlow, GLOW_REST_MS);
-  }
+  // The colour light is painted into three small static areas (#glow-top, #fixed-fade, #glow-low), never into
+  // a layer that moves and never via #page. Repainting it costs the TV a frame or two, so it changes only once
+  // per billboard swap (together with the text, BB_REST_MS after the last key), not on every key press.
   function applyGlow() {
     const info = bbKey && billboardInfo(bbKey);
     if (!info) return;
@@ -1050,42 +1170,57 @@
     setTimeout(() => el.classList.remove(cls || 'pop'), 460);
   }
 
-  let smartRefreshTimer = 0;
+  // Commands and polls can overlap (a poll started before a command answers after it; two quick presses
+  // send two commands). smartEpoch changes with every command, and a poll that started under an older epoch
+  // is dropped, so it can never paint a state from before the command. cmdSeq marks the newest command per
+  // device: only that one may write the model or clear the optimistic state.
+  let smartRefreshTimer = 0, smartEpoch = 0, pollSeq = 0, pollApplied = 0;
+  const cmdSeq = new Map();       // mac -> number of the newest command
+
+  function refreshMenu() { if (mode === 'menu' && menuRefresh) menuRefresh(); }
+
   async function smartSet(devs, on, brightness, tileId, tone) {   // tone: { color: "#rrggbb" } or { kelvin }
-    if (!devs.length) return;
+    if (!devs.length) return [];
+    smartEpoch++;
     const until = Date.now() + 5000;
-    for (const d of devs) pending.set(d.id, { state: on ? 'on' : 'off', brightness: brightness != null ? brightness : null, until });
+    const seqs = devs.map(d => {
+      const n = (cmdSeq.get(d.id) || 0) + 1;
+      cmdSeq.set(d.id, n);
+      pending.set(d.id, { state: on ? 'on' : 'off', brightness: brightness != null ? brightness : null, until, seq: n });
+      return n;
+    });
     renderTiles();
     if (tileId) popTile(tileId);
-    if (mode === 'menu' && menuRefresh) menuRefresh();
+    refreshMenu();
     const results = await Promise.all(devs.map(d => {
-      if (!IS_TV) return Promise.resolve({ status: 'ok' });
       const body = { id: d.id, state: on ? 'on' : 'off' };
       if (brightness != null) body.brightness = brightness;
       if (tone) Object.assign(body, tone);
       return api('/api/smarthome/set', body).catch(() => ({ status: 'error', error: 'Smart-Home-Server nicht erreichbar' }));
     }));
+    smartEpoch++;
     const failed = devs.filter((d, i) => !results[i] || results[i].status !== 'ok');
-    for (const d of devs) {
-      if (failed.includes(d)) pending.delete(d.id);
-      else if (state.smart) {   // keep the new state in the model until the next poll confirms it
-        const m = state.smart.find(x => x.id === d.id);
-        if (m) { m.state = on ? 'on' : 'off'; if (brightness != null) m.brightness = brightness; if (tone) { m.color = tone.color || kelvinHex(tone.kelvin); m.kelvin = tone.kelvin || null; } m.online = true; }
+    let changed = false;
+    devs.forEach((d, i) => {
+      if (cmdSeq.get(d.id) !== seqs[i]) return;          // a newer command for this device owns its state
+      if (failed.includes(d)) { pending.delete(d.id); return; }
+      const m = state.smart && state.smart.find(x => x.id === d.id);   // keep the new state until the next poll confirms it
+      if (m) {
+        m.state = on ? 'on' : 'off'; m.online = true;
+        if (brightness != null) m.brightness = brightness;
+        if (tone) { m.color = tone.color || kelvinHex(tone.kelvin); m.kelvin = tone.kelvin || null; }
+        changed = true;
       }
-    }
-    if (tone && failed.length < devs.length) {   // show the new colour at once, not with the next poll
-      renderTiles();
-      if (mode === 'menu' && menuRefresh) menuRefresh();
-    }
+    });
     if (failed.length) {
       const err = results.find(r => r && r.status !== 'ok');
-      toast((failed.length === 1 ? failed[0].name : failed.length + ' Geräte') + ': ' + ((err && err.error) || 'nicht erreichbar'), 3600);
-      renderTiles();
+      toast((failed.length === 1 ? failed[0].name : plural(failed.length, 'Gerät', 'Geräte')) + ': ' + ((err && err.error) || 'nicht erreichbar'), 3600);
       if (tileId) popTile(tileId, 'fail');
-      if (mode === 'menu' && menuRefresh) menuRefresh();
     }
+    if (changed || failed.length) { renderTiles(); refreshMenu(); }   // e.g. the new colour at once, not with the next poll
     clearTimeout(smartRefreshTimer);
     smartRefreshTimer = setTimeout(fetchSmartDevices, 1500);
+    return failed;
   }
 
   function activateTile(t) {
@@ -1095,9 +1230,7 @@
       smartSet([t.dev], t.dev.state !== 'on', null, t.id);
       return;
     }
-    // room: anything on -> all off, otherwise all on
-    const reachable = t.devs.filter(d => d.online !== false);
-    smartSet(reachable, !t.on, null, t.id);
+    roomSet(t, !t.on);   // room: anything on -> all off, otherwise all on
   }
 
   function screenOff() {
@@ -1113,65 +1246,130 @@
   }
 
   async function fetchSmartDevices() {
-    if (!IS_TV) { renderTiles(); return; }
+    const seq = ++pollSeq, epoch = smartEpoch;
+    let devs;
     try {
-      const devs = await api('/api/smarthome/devices', undefined, 8000);
-      if (!Array.isArray(devs) || !devs.length) return;
-      const now = Date.now();
-      for (const [id, p] of pending) {        // a fresh reading that agrees ends the optimistic phase
-        const d = devs.find(x => x.id === id);
-        if (p.until < now || (d && d.state === p.state)) pending.delete(id);
-      }
-      const changed = JSON.stringify(devs) !== JSON.stringify(state.smart);
-      state.smart = devs;
-      if (changed) {
-        try { localStorage.setItem(SMART_CACHE_KEY, JSON.stringify(devs)); } catch (e) { /* ignore */ }
-        renderTiles();
-        if (mode === 'menu' && menuRefresh) menuRefresh();
-      }
-    } catch (e) { /* backend down: keep showing what we have */ }
+      devs = await api('/api/smarthome/devices', undefined, 8000);
+      if (!Array.isArray(devs)) throw new Error('bad reply');
+    } catch (e) {                               // backend down: keep showing what we have, say so after 2 misses
+      if (seq < pollApplied) return;
+      smartFails++;
+      if (smartFails === 2) { renderTiles(); refreshMenu(); }
+      return;
+    }
+    if (seq < pollApplied || epoch !== smartEpoch) return;   // an answer from before a newer poll or a command
+    pollApplied = seq;
+    devs = normDevices(devs);
+    const wasDown = smartFails >= 2;
+    smartFails = 0;
+    smartFresh = true;
+    const now = Date.now();
+    for (const [id, p] of pending) {        // a fresh reading that agrees ends the optimistic phase
+      const d = devs.find(x => x.id === id);
+      if (p.until < now || (d && d.state === p.state && (p.brightness == null || d.brightness == null || Math.abs(d.brightness - p.brightness) < 2))) pending.delete(id);
+    }
+    const changed = JSON.stringify(devs) !== JSON.stringify(state.smart);
+    state.smart = devs;
+    if (changed || wasDown) {
+      if (changed) { try { localStorage.setItem(SMART_CACHE_KEY, JSON.stringify(devs)); } catch (e) { /* ignore */ } }
+      renderTiles();
+      refreshMenu();
+    }
   }
 
   /* ------------------------------------------------------------------ */
   /* Menu                                                                */
   /* ------------------------------------------------------------------ */
-  const menuEl = $('menu'), menuList = $('menu-list');
-  const MENU_ROWS = 8, MENU_ROW_H = 62;
-  let menu = null;              // { entries, index, back }
+  const menuEl = $('menu'), menuList = $('menu-list'), menuIcon = $('menu-icon');
+  // Every menu is one list. Entries:
+  //   action  { label, hint, action, danger, on (current choice: check mark), sub (opens a submenu: chevron), swatch }
+  //   toggle  { label, hint, toggle: true|false, action }                       (a switch on the right)
+  //   slider  { label, slider: { min, max, step, wrap, bar }, value(), text(v), hint(), change(v), full() }
+  //           ◀▶ move it (held/fast presses: 3 steps), OK = action or close, ◀ never leaves the menu
+  // Row heights are constants, so scrolling and the cursor never read layout.
+  const MENU_CLIP_H = 496, ROW_H = 62, SLIDER_H = 104;
+  let menu = null;              // { entries, index, back, onClose, rows, tops }
   let menuArmed = true;         // OK only counts after the key that opened the menu was released
   let menuRefresh = null;       // rebuilds the open menu in place (live smart home state)
   let menuCursor = null;
 
-  function openMenu(def) {
-    const reopen = mode === 'menu' && menu;
-    menu = { entries: def.entries, index: Math.min(def.index || 0, def.entries.length - 1), back: def.back || null };
-    menuRefresh = def.refresh || null;
+  function menuHead(def) {
     $('menu-title').textContent = def.title;
     $('menu-sub').textContent = def.sub || '';
-    const icon = $('menu-icon');
-    icon.style.backgroundImage = def.icon ? 'url("' + def.icon + '")' : '';
-    icon.style.setProperty('--c', def.color || '#2c2d31');
-    icon.style.display = def.icon ? '' : 'none';
+    menuIcon.className = '';
+    menuIcon.style.backgroundImage = def.icon ? 'url("' + def.icon + '")' : '';
+    menuIcon.style.setProperty('--c', def.color || '');
+    if (def.icon) { menuIcon.textContent = ''; menuIcon.classList.add('img'); }
+    else if (def.glyph) {
+      menuIcon.innerHTML = def.glyphHtml || svg(def.glyph);
+      menuIcon.classList.add('glyph');
+      if (def.round) menuIcon.classList.add('round');
+      if (def.lit) menuIcon.classList.add('lit');
+    } else if (def.swatch) { menuIcon.textContent = ''; menuIcon.classList.add('swatch', 'round'); }
+    else menuIcon.classList.add('none');
+  }
+
+  function menuRow(entry, i) {
+    const row = h('div', 'mi' + (entry.danger ? ' danger' : '') + (entry.on ? ' on' : '') + (entry.slider ? ' slider' : ''));
+    row.setAttribute('role', entry.slider ? 'slider' : 'menuitem');
+    const top = h('div', 'mi-line');
+    const label = h('span', 'mi-label', entry.label);
+    if (entry.swatch) {
+      const sw = h('i', 'mi-swatch');
+      sw.style.setProperty('--sw', entry.swatch);
+      label.insertBefore(sw, label.firstChild);
+    }
+    top.appendChild(label);
+    const right = h('span', 'mi-right');
+    const hint = h('span', 'mi-hint', entry.slider ? '' : (entry.hint || ''));
+    right.appendChild(hint);
+    if (entry.on) right.insertAdjacentHTML('beforeend', '<span class="mi-mark">' + svg('check') + '</span>');
+    if (entry.sub) right.insertAdjacentHTML('beforeend', '<span class="mi-mark sub">' + svg('chevron') + '</span>');
+    if (typeof entry.toggle === 'boolean') right.appendChild(h('i', 'mi-switch' + (entry.toggle ? ' on' : '')));
+    top.appendChild(right);
+    row.appendChild(top);
+    const parts = { row, hint };
+    if (entry.slider) {
+      const bar = h('div', 'mi-bar ' + (entry.slider.bar || 'level'));
+      const fill = h('i', 'mi-fill');
+      const knobBox = h('span', 'mi-knob');
+      knobBox.appendChild(h('b', ''));
+      bar.appendChild(fill);
+      bar.appendChild(knobBox);
+      row.appendChild(bar);
+      Object.assign(parts, { bar, fill, knobBox });
+      bindSliderPointer(bar, i);
+    }
+    row.addEventListener('mouseenter', () => menuFocus(i));
+    row.addEventListener('click', e => {
+      if (entry.slider && parts.bar.contains(e.target)) return;   // a click on the bar sets the value (bindSliderPointer)
+      menuFocus(i); menuSelect();
+    });
+    return parts;
+  }
+
+  function openMenu(def) {
+    const reopen = (mode === 'menu') && menu;
+    if (menu && menu.onClose && menu.onClose !== def.onClose) menu.onClose();   // e.g. the colour picker sends its last value
+    menu = { entries: def.entries, index: Math.max(0, Math.min(def.index || 0, def.entries.length - 1)),
+      back: def.back || null, onClose: def.onClose || null, rows: [], tops: [] };
+    menuRefresh = def.refresh || null;
+    menuHead(def);
     $('menu-hint').textContent = def.hint || '';
     menuList.textContent = '';
     menuCursor = h('div', '');
     menuCursor.id = 'menu-cursor';
     menuList.appendChild(menuCursor);
+    let y = 0;
     def.entries.forEach((entry, i) => {
-      const row = h('div', 'mi' + (entry.danger ? ' danger' : '') + (entry.on ? ' on' : ''));
-      row.setAttribute('role', 'menuitem');
-      const label = h('span', '', entry.label);
-      if (entry.swatch) {
-        const sw = h('i', 'mi-swatch');
-        sw.style.setProperty('--sw', entry.swatch);
-        label.insertBefore(sw, label.firstChild);
-      }
-      row.appendChild(label);
-      if (entry.hint) row.appendChild(h('span', 'mi-hint', entry.hint));
-      row.addEventListener('mouseenter', () => menuFocus(i));
-      row.addEventListener('click', () => { menuFocus(i); menuSelect(); });
-      menuList.appendChild(row);
+      const parts = menuRow(entry, i);
+      menu.rows.push(parts);
+      menu.tops.push(y);
+      y += entry.slider ? SLIDER_H : ROW_H;
+      menuList.appendChild(parts.row);
+      if (entry.slider) paintSlider(i);
     });
+    menu.height = y;
     menuEl.hidden = false;
     mode = 'menu';
     menuArmed = reopen ? menuArmed : !okDown;
@@ -1180,29 +1378,34 @@
   }
 
   function menuFocus(i, instant) {
-    if (!menu) return;
+    if (!menu || !menu.entries.length) return;
     menu.index = Math.max(0, Math.min(menu.entries.length - 1, i));
-    const rows = menuList.querySelectorAll('.mi');
-    rows.forEach((row, j) => row.classList.toggle('focused', j === menu.index));
+    menu.rows.forEach((p, j) => p.row.classList.toggle('focused', j === menu.index));
+    const top = menu.tops[menu.index], hgt = (menu.entries[menu.index].slider ? SLIDER_H : ROW_H) - 4;
     if (menuCursor) {
       if (instant) menuCursor.style.transition = 'none';
-      menuCursor.style.transform = 'translateY(' + (menu.index * MENU_ROW_H) + 'px)';
+      menuCursor.style.transform = 'translateY(' + top + 'px)';
+      menuCursor.style.height = hgt + 'px';
       if (instant) { void menuCursor.offsetWidth; menuCursor.style.transition = ''; }
     }
-    const top = Math.max(0, Math.min(menu.index - Math.floor(MENU_ROWS / 2), menu.entries.length - MENU_ROWS));
-    menuList.style.transform = 'translateY(' + (-top * MENU_ROW_H) + 'px)';
+    // keep the focused row near the middle of the clip
+    const scroll = Math.max(0, Math.min(menu.height - 4 - MENU_CLIP_H, top - (MENU_CLIP_H - hgt) / 2));
+    menuList.style.transform = scroll > 0 ? 'translateY(' + (-Math.round(scroll)) + 'px)' : '';
   }
 
   function menuSelect() {
     const entry = menu && menu.entries[menu.index];
-    if (entry && entry.action) entry.action();
+    if (!entry) return;
+    if (entry.action) entry.action();
+    else if (entry.slider) closeMenu();          // OK on a slider: done
   }
 
   function closeMenu() {
+    const done = menu && menu.onClose;
     menu = null;
     menuRefresh = null;
-    if (picker) { clearTimeout(picker.sendTimer); if (picker.dirty) pickerSend(); picker = null; }
-    if (mode === 'menu' || mode === 'picker') mode = 'home';
+    if (done) done();
+    if (mode === 'menu') mode = 'home';
     flushRender();
     document.body.classList.remove('menu-open');
     setTimeout(() => { if (!menu) menuEl.hidden = true; }, 320);
@@ -1213,12 +1416,91 @@
     if (back) back(); else closeMenu();
   }
 
+  /* sliders */
+  function sliderValue(entry) {
+    const s = entry.slider, v = Number(entry.value());
+    return Math.max(s.min, Math.min(s.max, isFinite(v) ? v : s.min));
+  }
+
+  function paintSlider(i) {
+    const entry = menu && menu.entries[i], p = menu && menu.rows[i];
+    if (!entry || !p || !p.bar) return;
+    const s = entry.slider, v = sliderValue(entry);
+    const f = ((v - s.min) / (s.max - s.min)).toFixed(4);
+    p.bar.style.setProperty('--p', f);
+    if (entry.full) p.bar.style.setProperty('--full', entry.full());
+    const extra = entry.hint ? entry.hint() : '';
+    p.hint.textContent = (extra ? extra + '  ·  ' : '') + entry.text(v);
+  }
+
+  let sliderLastKey = 0;
+  function sliderStep(dir, e) {
+    const entry = menu.entries[menu.index], s = entry.slider;
+    const now = Date.now();
+    const fast = e && (e.repeat || now - sliderLastKey < 260) ? 3 : 1;   // held key, or the phone app repeating
+    sliderLastKey = now;
+    const cur = sliderValue(entry);
+    let v = cur + dir * s.step * fast;
+    if (s.wrap) v = ((v - s.min) % (s.max - s.min + s.step) + (s.max - s.min + s.step)) % (s.max - s.min + s.step) + s.min;
+    else v = Math.max(s.min, Math.min(s.max, v));
+    if (v === cur) { bump(menu.rows[menu.index].bar, dir < 0 ? 'left' : 'right'); return; }
+    sliderSet(menu.index, v);
+  }
+
+  function sliderSet(i, v) {
+    const entry = menu.entries[i];
+    entry.change(v);
+    for (let j = 0; j < menu.entries.length; j++) if (menu.entries[j].slider) paintSlider(j);   // linked sliders ("aktiv")
+    if (menu.paint) menu.paint();
+  }
+
+  // Magic Remote: click or drag on a slider bar
+  function bindSliderPointer(bar, i) {
+    const at = e => {
+      if (!menu || !menu.entries[i] || !menu.entries[i].slider) return;
+      const s = menu.entries[i].slider, b = bar.getBoundingClientRect();
+      const f = Math.max(0, Math.min(1, (e.clientX - b.left) / Math.max(1, b.width)));
+      const v = Math.round((s.min + f * (s.max - s.min)) / s.step) * s.step;
+      menuFocus(i);
+      sliderSet(i, Math.max(s.min, Math.min(s.max, v)));
+    };
+    bar.addEventListener('mousedown', e => { e.stopPropagation(); at(e); });
+    bar.addEventListener('mousemove', e => { if (e.buttons & 1) at(e); });
+  }
+
+  // Sends the newest value only: while a request runs, later values wait and only the last one goes out.
+  const senders = new Map();
+  function sendLatest(key, fn) {
+    let s = senders.get(key);
+    if (!s) { s = { busy: false, next: null }; senders.set(key, s); }
+    if (s.busy) { s.next = fn; return; }
+    s.busy = true;
+    Promise.resolve().then(fn).catch(() => {}).then(() => {
+      s.busy = false;
+      const n = s.next;
+      s.next = null;
+      if (n) sendLatest(key, n);
+    });
+  }
+
+  // Brightness while it is being changed: the slider shows this, not the (older) lamp state
+  const drafts = new Map();       // mac -> {value, at}
+  const draftOf = (id, field) => { const x = drafts.get(id + field); return x && Date.now() - x.at < 4000 ? x.value : null; };
+  let draftTimer = 0;
+  function setLevel(d, v) {
+    drafts.set(d.id + 'bri', { value: v, at: Date.now() });
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => sendLatest(d.id, () => smartSet([d], true, v, null).then(failed => {
+      if (failed && failed.length) drafts.delete(d.id + 'bri');
+    })), 160);   // the lamp follows once the value rests a moment (no request per key)
+  }
+
   function openCardMenu(id) {
     if (id === 'hero:weather' || id === WETTER_APP) {
       openMenu({
-        title: 'Wetter', sub: 'Musterstadt',
+        title: 'Wetter', sub: 'Musterstadt', glyph: $('w-icon').dataset.icon || 'weather',
         entries: [
-          { label: 'WetterOnline öffnen', hint: '14 Tage & Radar', action: () => { closeMenu(); openWeatherApp(); } },
+          { label: 'WetterOnline öffnen', hint: 'Wetter & Radar', action: () => { closeMenu(); openWeatherApp(); } },
           { label: 'Wetter aktualisieren', action: () => { closeMenu(); fetchWeather(true); } }
         ]
       });
@@ -1227,7 +1509,7 @@
     if (id === 'hero:gemini') { openGeminiModal(); return; }
     if (id === 'hero:audio') {
       openMenu({
-        title: 'Audioausgabe', sub: $('audio-title').textContent,
+        title: 'Audioausgabe', sub: $('audio-title').textContent, glyph: $('audio-icon').dataset.icon || 'speaker',
         entries: [{ label: 'Ton-Einstellungen öffnen', action: () => { closeMenu(); openAudioSettings(); } }]
       });
       return;
@@ -1247,7 +1529,11 @@
     entries.push({ label: 'Ausblenden', danger: true, action: () => { closeMenu(); setHidden(itemId, true); } });
     const el = els.get(id);
     openMenu({ title: it.title, sub: it.kind === 'input' ? it.sub : (lastUse(itemId) ? 'Zuletzt ' + ago(lastUse(itemId)) : ''),
-      icon: it.icon || null, color: el ? el.style.getPropertyValue('--c') : '', entries });
+      icon: it.icon || null, glyph: it.glyph || null, color: el ? el.style.getPropertyValue('--c') : '', entries });
+  }
+
+  function tileHead(t, title, sub) {
+    return { title, sub, glyph: t.icon, round: true, lit: !!t.on, color: t.on ? lampOf(t) : '' };
   }
 
   function openTileMenu(id, index) {
@@ -1255,42 +1541,53 @@
     if (!t) { closeMenu(); return; }
     const again = () => openTileMenu(id, menu ? menu.index : 0);
     if (t.kind === 'display') {
-      openMenu({
-        title: 'Display aus', sub: 'Musik-Modus für den Denon',
-        hint: 'Schaltet nur das OLED-Panel aus, der Ton läuft weiter. Jede Taste schaltet es wieder ein.',
+      openMenu(Object.assign(tileHead(t, 'Display aus', 'Musik-Modus · der Ton läuft weiter'), {
+        hint: 'Nur das OLED-Panel geht aus. Jede Taste der Fernbedienung schaltet es wieder ein.',
         entries: [{ label: 'Display jetzt ausschalten', action: () => { closeMenu(); screenOff(); } }]
-      });
+      }));
       return;
     }
     if (t.kind === 'dev') {
-      const d = t.dev;
-      const entries = [{ label: d.state === 'on' ? 'Ausschalten' : 'Einschalten', action: () => { activateTile(tiles.get(id) || t); } }];
-      const caps = d.capabilities || [];
-      if (d.type === 'light' && (caps.includes('color') || caps.includes('white'))) {
-        entries.push({ label: 'Farbe', hint: (TONES.find(x => toneIs(d, x)) || {}).label || '', action: () => openToneMenu(id, () => openTileMenu(id, 1)) });
+      const d = t.dev, caps = d.capabilities || [], light = d.type === 'light';
+      const entries = [{ label: light ? 'Licht' : 'Steckdose', hint: t.offline ? 'nicht erreichbar' : '',
+        toggle: d.state === 'on' && !t.offline, action: () => { activateTile(tiles.get(id) || t); } }];
+      if (light) {
+        entries.push({
+          label: 'Helligkeit', slider: { min: 10, max: 100, step: 5, bar: 'level' },
+          value: () => { const x = draftOf(d.id, 'bri'); return x != null ? x : (typeof d.brightness === 'number' ? d.brightness : 100); },
+          text: v => Math.round(v) + ' %',
+          hint: () => (d.state === 'on' ? '' : 'schaltet ein'),
+          change: v => setLevel(d, v)
+        });
       }
-      if (d.type === 'light') {
-        for (const b of [10, 25, 50, 75, 100]) {
-          const cur = d.state === 'on' && typeof d.brightness === 'number' && Math.abs(d.brightness - b) < 5;
-          entries.push({ label: 'Helligkeit ' + b + ' %', hint: cur ? 'aktuell' : '', on: cur,
-            action: () => smartSet([d], true, b, id) });
-        }
+      if (light && (caps.includes('color') || caps.includes('white'))) {
+        entries.push({ label: 'Farbe', hint: toneName(d), sub: true, swatch: d.state === 'on' && d.color ? d.color : null,
+          action: () => openToneMenu(id, () => openTileMenu(id, entries.findIndex(x => x.label === 'Farbe'))) });
       }
-      entries.push({ label: 'Hauptraum wechseln', hint: t.dev.room, action: () => openRoomPicker(again) });
-      openMenu({ title: d.name, sub: d.room + ' · ' + deviceState(d), entries, index, refresh: again });
+      entries.push({ label: 'Hauptraum wechseln', hint: d.room, sub: true, action: () => openRoomPicker(again) });
+      openMenu(Object.assign(tileHead(t, d.name, d.room + ' · ' + deviceState(d)), { entries, index, refresh: again }));
       return;
     }
     // room
+    const reachable = () => t.devs.filter(d => d.online !== false);
     const entries = [
-      { label: 'Alle einschalten', action: () => smartSet(t.devs.filter(d => d.online !== false), true, null, id) },
-      { label: 'Alle ausschalten', action: () => smartSet(t.devs.filter(d => d.online !== false), false, null, id) }
+      { label: 'Alle einschalten', action: () => roomSet(t, true) },
+      { label: 'Alle ausschalten', action: () => roomSet(t, false) }
     ];
     for (const d of t.devs) {
-      entries.push({ label: d.name, hint: deviceState(d), on: d.state === 'on' && d.online !== false,
-        action: () => { if (d.online === false) toast(d.name + ' ist gerade nicht erreichbar'); else smartSet([d], d.state !== 'on', null, id); } });
+      const off = d.online === false;
+      entries.push({ label: d.name, hint: deviceState(d), toggle: d.state === 'on' && !off,
+        action: () => { if (off) toast(d.name + ' ist gerade nicht erreichbar'); else smartSet([d], d.state !== 'on', null, id); } });
     }
     entries.push({ label: 'Als Hauptraum zeigen', hint: 'Geräte einzeln', action: () => { setMainRoom(t.room); closeMenu(); } });
-    openMenu({ title: t.room, sub: t.state, entries, index, refresh: again, hint: 'OK schaltet das Gerät um.' });
+    openMenu(Object.assign(tileHead(t, t.room, t.state + (reachable().length < t.devs.length ? ' · ' + (t.devs.length - reachable().length) + ' nicht erreichbar' : '')),
+      { entries, index, refresh: again }));
+  }
+
+  function roomSet(t, on) {
+    const reachable = t.devs.filter(d => d.online !== false);
+    if (!reachable.length) { toast(t.room + ': kein Gerät erreichbar'); popTile(t.id, 'fail'); fetchSmartDevices(); return; }
+    smartSet(reachable, on, null, t.id);
   }
 
   // colours and white tones for WiZ lights (white needs caps "white", colours need "color")
@@ -1325,26 +1622,25 @@
     const d = t.dev, caps = d.capabilities || [];
     const tones = TONES.filter(x => caps.includes(x.kelvin ? 'white' : 'color'));
     const again = () => openToneMenu(id, back, menu ? menu.index : 0);
+    const custom = !!toneName(d) && !TONES.some(x => toneIs(d, x));
     const entries = [{
-      label: caps.includes('color') ? 'Eigene Farbe …' : 'Eigener Weißton …', hint: caps.includes('color') ? 'alle Farben' : 'stufenlos',
-      swatch: 'conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)',
+      label: caps.includes('color') ? 'Eigene Farbe' : 'Eigener Weißton', hint: custom ? (d.kelvin ? toneName(d) : '') : (caps.includes('color') ? 'alle Farben' : 'stufenlos'),
+      on: custom, sub: true, swatch: caps.includes('color') ? 'conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)' : 'linear-gradient(90deg, #ffb46b, #fff, #dfe9ff)',
       action: () => openPicker(id, () => openToneMenu(id, back, 0))
     }];
     for (const x of tones) {
-      const cur = toneIs(d, x);
-      entries.push({ label: x.label, hint: cur ? 'aktuell' : (x.hint || ''), on: cur, swatch: x.color || kelvinHex(x.kelvin),
+      entries.push({ label: x.label, hint: x.hint || '', on: toneIs(d, x), swatch: x.color || kelvinHex(x.kelvin),
         action: () => smartSet([d], true, null, id, x.kelvin ? { kelvin: x.kelvin } : { color: x.color }) });
     }
-    openMenu({
-      title: 'Farbe', sub: d.name + ' · ' + deviceState(d),
+    openMenu(Object.assign(tileHead(t, 'Farbe', d.name + ' · ' + deviceState(d)), {
       entries, index: index || 0, refresh: again, back,
-      hint: 'OK stellt die Farbe ein, das Menü bleibt offen. Links/Zurück geht eine Ebene zurück.'
-    });
+      hint: 'OK stellt die Farbe ein, das Menü bleibt offen.'
+    }));
   }
 
-  /* Colour picker: every colour (hue + saturation) and every white tone, live on the lamp.
-     Up/down picks a slider, left/right moves it (held keys move faster), OK or Back closes. */
-  let picker = null;
+  /* Colour picker: every colour (hue + saturation) and every white tone, live on the lamp. Three sliders in
+     the same menu: ▲▼ picks one, ◀▶ moves it (held keys move faster), OK closes, Back returns to the colours.
+     The slider moved last is "aktiv" and decides whether the lamp gets a colour or a white tone. */
   const KELVIN_MIN = 2200, KELVIN_MAX = 6500;
 
   function hsvHex(h, s) {   // value is always full: the lamp's brightness is set separately
@@ -1365,96 +1661,43 @@
     const t = tiles.get(id);
     if (!t || t.kind !== 'dev') { closeMenu(); return; }
     const d = t.dev, caps = d.capabilities || [];
-    const rows = [];
-    if (caps.includes('color')) rows.push('hue', 'sat');
-    if (caps.includes('white')) rows.push('kelvin');
-    if (!rows.length) { closeMenu(); return; }
+    const color = caps.includes('color'), white = caps.includes('white');
+    if (!color && !white) { closeMenu(); return; }
     const hsv = (!d.kelvin && hexHsv(d.color)) || { h: 30, s: 1 };
-    picker = {
-      id, d, back, rows, row: d.kelvin && rows.includes('kelvin') ? rows.indexOf('kelvin') : 0,
-      h: Math.round(hsv.h), s: Math.round(hsv.s * 100) / 100,
+    const p = {
+      h: Math.round(hsv.h / 5) * 5 % 360, s: Math.round(hsv.s * 20) / 20,
       k: Math.max(KELVIN_MIN, Math.min(KELVIN_MAX, Math.round((d.kelvin || 2700) / 100) * 100)),
-      white: !!d.kelvin || !caps.includes('color'), sendTimer: 0, els: {}
+      white: !!d.kelvin || !color, dirty: false, timer: 0
     };
-    openMenu({ title: rows[0] === 'hue' ? 'Eigene Farbe' : 'Eigener Weißton', sub: d.name, entries: [],
-      hint: '▲▼ Regler wählen · ◀▶ verstellen (halten = schneller) · OK fertig' });
-    mode = 'picker';
-    menuCursor.style.display = 'none';
-    const box = h('div', 'pk');
-    const prev = h('div', 'pk-preview');
-    box.appendChild(prev);
-    picker.els.preview = prev;
-    const names = { hue: 'Farbton', sat: 'Sättigung', kelvin: 'Weißton' };
-    picker.els.rows = rows.map(r => {
-      const row = h('div', 'pk-row');
-      const head = h('div', 'pk-head');
-      head.appendChild(h('span', 'pk-label', names[r]));
-      const val = h('span', 'pk-val');
-      head.appendChild(val);
-      const bar = h('div', 'pk-bar ' + r);
-      const knob = h('b', '');
-      bar.appendChild(knob);
-      row.appendChild(head); row.appendChild(bar);
-      box.appendChild(row);
-      return { r, row, val, bar, knob };
-    });
-    menuList.appendChild(box);
-    pickerPaint();
-  }
-
-  function pickerPaint() {
-    const p = picker;
-    if (!p) return;
-    const color = p.white ? kelvinHex(p.k) : hsvHex(p.h, p.s);
-    p.els.preview.style.setProperty('--c', color);
-    for (const [i, x] of p.els.rows.entries()) {
-      x.row.classList.toggle('focused', i === p.row);
-      x.row.classList.toggle('active', x.r === 'kelvin' ? p.white : !p.white);
-      let pos, text;
-      if (x.r === 'hue') { pos = p.h / 360; text = p.h + '°'; }
-      else if (x.r === 'sat') { pos = p.s; text = Math.round(p.s * 100) + ' %'; x.bar.style.setProperty('--full', hsvHex(p.h, 1)); }
-      else { pos = (p.k - KELVIN_MIN) / (KELVIN_MAX - KELVIN_MIN); text = p.k + ' K'; }
-      x.knob.style.setProperty('--p', pos.toFixed(4));
-      x.val.textContent = text;
+    const shown = () => (p.white ? kelvinHex(p.k) : hsvHex(p.h, p.s));
+    const send = () => {
+      clearTimeout(p.timer);
+      if (!p.dirty) return;
+      p.dirty = false;
+      const tone = p.white ? { kelvin: p.k } : { color: hsvHex(p.h, p.s) };
+      sendLatest(d.id, () => smartSet([d], true, null, null, tone));
+    };
+    const changed = () => { p.dirty = true; clearTimeout(p.timer); p.timer = setTimeout(send, 160); };
+    const active = on => (on ? 'aktiv' : '');
+    const entries = [];
+    if (color) {
+      entries.push({ label: 'Farbton', slider: { min: 0, max: 355, step: 5, wrap: true, bar: 'hue' },
+        value: () => p.h, text: v => Math.round(v) + '°', hint: () => active(!p.white),
+        change: v => { p.h = v; p.white = false; changed(); } });
+      entries.push({ label: 'Sättigung', slider: { min: 0, max: 100, step: 5, bar: 'sat' },
+        value: () => Math.round(p.s * 100), text: v => Math.round(v) + ' %', hint: () => active(!p.white), full: () => hsvHex(p.h, 1),
+        change: v => { p.s = v / 100; p.white = false; changed(); } });
     }
-  }
-
-  function pickerKey(k, e) {
-    const p = picker;
-    if (!p) { closeMenu(); return; }
-    if (k === KEY.UP || k === KEY.DOWN) {
-      p.row = Math.max(0, Math.min(p.rows.length - 1, p.row + (k === KEY.UP ? -1 : 1)));
-      pickerPaint();
-      return;
+    if (white) {
+      entries.push({ label: 'Weißton', slider: { min: KELVIN_MIN, max: KELVIN_MAX, step: 100, bar: 'kelvin' },
+        value: () => p.k, text: v => Math.round(v) + ' K', hint: () => active(p.white),
+        change: v => { p.k = v; p.white = true; changed(); } });
     }
-    if (k === KEY.LEFT || k === KEY.RIGHT) {
-      const now = Date.now(), dir = k === KEY.LEFT ? -1 : 1;
-      const fast = e.repeat || now - (p.lastKey || 0) < 260 ? 3 : 1;   // held key, or the phone app repeating
-      p.lastKey = now;
-      p.dirty = true;
-      const r = p.rows[p.row];
-      if (r === 'hue') { p.h = ((p.h + dir * 5 * fast) % 360 + 360) % 360; p.white = false; }
-      else if (r === 'sat') { p.s = Math.max(0, Math.min(1, Math.round((p.s + dir * 0.05 * fast) * 100) / 100)); p.white = false; }
-      else { p.k = Math.max(KELVIN_MIN, Math.min(KELVIN_MAX, p.k + dir * 100 * fast)); p.white = true; }
-      pickerPaint();
-      clearTimeout(p.sendTimer);   // the lamp follows once the value rests a moment (no request per key)
-      p.sendTimer = setTimeout(pickerSend, 160);
-      return;
-    }
-    if (k === KEY.OK && (e.repeat || okBlocked)) return;
-    // OK, Back, Esc: done (the lamp already shows the colour)
-    clearTimeout(p.sendTimer);
-    if (p.dirty) pickerSend();
-    const back = p.back;
-    picker = null;
-    if (k === KEY.OK) { okBlocked = true; closeMenu(); } else if (back) back(); else closeMenu();
-  }
-
-  function pickerSend() {
-    const p = picker;
-    if (!p) return;
-    p.dirty = false;
-    smartSet([p.d], true, null, null, p.white ? { kelvin: p.k } : { color: hsvHex(p.h, p.s) });
+    openMenu({ title: color ? 'Eigene Farbe' : 'Eigener Weißton', sub: d.name, swatch: true, entries, back, onClose: send,
+      index: p.white && white ? entries.length - 1 : 0,
+      hint: '▲▼ Regler wählen  ·  ◀▶ verstellen (halten = schneller)  ·  OK fertig' });
+    menu.paint = () => menuIcon.style.setProperty('--c', shown());
+    menu.paint();
   }
 
   function setMainRoom(room) {
@@ -1468,26 +1711,28 @@
     const devs = smartDevices();
     const main = mainRoom(devs);
     const rooms = roomsOf(devs);
+    const goBack = back || (() => openMoreMenu(0));
+    const entries = rooms.length
+      ? rooms.map(r => ({ label: r, hint: plural(devs.filter(d => d.room === r).length, 'Gerät', 'Geräte'),
+        on: r === main, action: () => { setMainRoom(r); closeMenu(); } }))
+      : [{ label: 'Keine Smart-Home-Geräte', hint: 'zurück', action: goBack }];
     openMenu({
-      title: 'Hauptraum', sub: 'Seine Geräte erscheinen einzeln',
-      entries: rooms.map(r => ({ label: r, hint: r === main ? 'aktuell' : devs.filter(d => d.room === r).length + ' Geräte',
-        on: r === main, action: () => { setMainRoom(r); closeMenu(); } })),
-      index: Math.max(0, rooms.indexOf(main)),
-      back: back || (() => openMoreMenu(0))
+      title: 'Hauptraum', sub: 'Seine Geräte erscheinen einzeln', glyph: 'room', round: true,
+      entries, index: Math.max(0, rooms.indexOf(main)), back: goBack
     });
   }
 
   function openMoreMenu(index) {
     const hidden = hiddenItems();
     openMenu({
-      title: 'Mehr', index,
+      title: 'Mehr', sub: 'Apps & Einstellungen', glyph: 'more', index,
       entries: [
-        { label: 'Smart Home: Hauptraum', hint: mainRoom(smartDevices()), action: () => openRoomPicker() },
-        { label: 'Ausgeblendete Apps', hint: String(hidden.length), action: () => openHiddenMenu(0) },
+        { label: 'Smart Home: Hauptraum', hint: mainRoom(smartDevices()) || '–', sub: true, action: () => openRoomPicker() },
+        { label: 'Ausgeblendete Apps', hint: String(hidden.length), sub: true, action: () => openHiddenMenu(0) },
         { label: 'TV-Einstellungen', action: () => { closeMenu(); launchId(SETTINGS, 'Einstellungen'); } },
         { label: 'App-Liste aktualisieren', action: () => { closeMenu(); refreshData(true).then(() => toast('App-Liste aktualisiert')); } },
         { label: 'LG-Startbildschirm öffnen', action: () => { closeMenu(); openLgHome(); } },
-        { label: 'Auf Standard zurücksetzen', danger: true, action: openResetMenu }
+        { label: 'Auf Standard zurücksetzen', danger: true, sub: true, action: openResetMenu }
       ],
       hint: 'Tipp: OK gedrückt halten öffnet das Menü jeder Kachel.'
     });
@@ -1497,13 +1742,14 @@
     const hidden = hiddenItems().sort((a, b) => a.title.localeCompare(b.title, 'de', { sensitivity: 'base' }));
     const entries = hidden.length
       ? hidden.map(it => ({ label: it.title, hint: 'einblenden', action: () => { setHidden(it.id, false); openHiddenMenu(menu ? menu.index : 0); } }))
-      : [{ label: 'Keine ausgeblendeten Apps', action: () => openMoreMenu(1) }];
-    openMenu({ title: 'Ausgeblendete Apps', entries, index, back: () => openMoreMenu(1), hint: hidden.length ? 'OK blendet die App wieder ein.' : '' });
+      : [{ label: 'Keine ausgeblendeten Apps', hint: 'zurück', action: () => openMoreMenu(1) }];
+    openMenu({ title: 'Ausgeblendete Apps', sub: hidden.length ? plural(hidden.length, 'App', 'Apps') : '', glyph: 'more',
+      entries, index, back: () => openMoreMenu(1), hint: hidden.length ? 'OK blendet die App wieder ein.' : '' });
   }
 
   function openResetMenu() {
     openMenu({
-      title: 'Zurücksetzen?', sub: 'Favoriten, Ausblendungen, Hauptraum', back: () => openMoreMenu(5), index: 1,
+      title: 'Zurücksetzen?', sub: 'Favoriten, Ausblendungen und Hauptraum', glyph: 'refresh', back: () => openMoreMenu(5), index: 1,
       entries: [
         { label: 'Ja, alles zurücksetzen', danger: true, action: () => { prefs = clone(DEFAULTS); savePrefs(); closeMenu(); focusId = null; render(); toast('Zurückgesetzt'); } },
         { label: 'Abbrechen', action: () => openMoreMenu(5) }
@@ -1601,6 +1847,7 @@
 
   document.addEventListener('keydown', e => {
     const k = e.keyCode;
+    wake();                        // any key counts as activity (also inside Gemini, also colour keys)
     if (geminiModalOpen) {
       if (k === KEY.BACK || k === KEY.ESC) { e.preventDefault(); closeGeminiModal(); return; }
       if (k in DIRS) { e.preventDefault(); geminiKey(k); return; }
@@ -1615,17 +1862,17 @@
     }
     if (!(k in DIRS) && k !== KEY.OK && k !== KEY.BACK && k !== KEY.ESC && k !== KEY.INFO) return;
     e.preventDefault();
-    wake();
     if (k === KEY.INFO) {
       if (e.repeat) return;
-      if (mode === 'menu' || mode === 'picker') closeMenu();
+      if (mode === 'menu') closeMenu();
       else if (mode === 'home' && !okDown && focusId) { homeStartUntil = 0; openCardMenu(focusId); }
       return;
     }
-    if (mode === 'picker') { pickerKey(k, e); return; }
     if (mode === 'menu') {
+      const entry = menu && menu.entries[menu.index];
       if (k === KEY.UP) menuFocus(menu.index - 1);
       else if (k === KEY.DOWN) menuFocus(menu.index + 1);
+      else if ((k === KEY.LEFT || k === KEY.RIGHT) && entry && entry.slider) sliderStep(k === KEY.LEFT ? -1 : 1, e);
       else if (k === KEY.OK) { if (menuArmed && !okBlocked && !e.repeat) { okBlocked = true; menuSelect(); } }
       else if (k === KEY.BACK || k === KEY.ESC || k === KEY.LEFT) menuBack();
       return;
@@ -1663,13 +1910,13 @@
     if (!okLong && mode === 'home') activate(focusId);
   });
 
-  $('scrim').addEventListener('click', () => { if (mode === 'menu' || mode === 'picker') closeMenu(); });
+  $('scrim').addEventListener('click', () => { if (mode === 'menu') closeMenu(); });
 
   let lastWheel = 0;
   document.addEventListener('wheel', e => {
     wake();
     const now = Date.now();
-    if (now - lastWheel < 200 || !e.deltaY) return;
+    if (now - lastWheel < 200 || !e.deltaY || geminiModalOpen) return;   // Gemini: the wheel scrolls the answer natively
     lastWheel = now;
     if (mode === 'menu') menuFocus(menu.index + (e.deltaY > 0 ? 1 : -1));
     else if (mode === 'home') move(e.deltaY > 0 ? 'down' : 'up');
@@ -1712,7 +1959,7 @@
     const elapsed = Date.now() - lastInput;
     if (!document.hidden) {
       if (elapsed > SCREENSAVER_MS) document.body.classList.add('screensaver');
-      else if (elapsed > IDLE_MS) document.body.classList.add('idle');
+      else if (elapsed > (geminiModalOpen ? IDLE_MS * 3 : IDLE_MS)) document.body.classList.add('idle');   // reading an answer takes a while
     }
   }, 1000);
   setInterval(() => {       // pixel shift: spread wear of static elements
@@ -1736,7 +1983,7 @@
   async function loadApps() {
     let changed = false;
     try {
-      const data = await getJSON('data/apps.json?t=' + Date.now());
+      const data = previewNoApps ? {} : await getJSON('data/apps.json?t=' + Date.now());
       if (Array.isArray(data.apps)) {
         changed = data.generatedAt !== state.generatedAt || !state.apps.length;
         state.apps = data.apps;
@@ -1804,7 +2051,7 @@
     lastRelaunch = now;
     onShown();
     if (handleGeminiParam(launchParams(e))) return;   // mic button: open/close Gemini, keep the page as it is
-    if (mode === 'menu' || mode === 'picker') closeMenu();
+    if (mode === 'menu') closeMenu();
     if (geminiModalOpen) closeGeminiModal();
     if (mode === 'move') endMove();
     const first = firstId();
@@ -1881,8 +2128,14 @@
     }
   }, 2000);
 
+  /* ------------------------------------------------------------------ */
+  /* PC preview only (never runs on the TV): fonts and a fake backend    */
+  /* ------------------------------------------------------------------ */
+  // The fake backend answers the same endpoints as gemini-tv-controller/server.py, so the preview runs the
+  // real code paths (polls, optimistic commands, failures). Query flags for testing unhappy states:
+  //   backend=offline|slow   smart=none|offline|mixed   smartdelay=<ms>   weather=error   gemini=error|slow
+  //   apps=none (no data/apps.json)   long=1 (very long names)
   if (!IS_TV) {
-    // PC preview only: the TV has these fonts built in, and there is no backend
     const st = document.createElement('style');
     const f = (w, file, fam) => '@font-face{font-family:"' + (fam || 'LG Smart UI') + '";font-weight:' + w +
       ';src:url("../design/fixtures/fonts/' + file + '")}';
@@ -1895,8 +2148,62 @@
       { id: 'HDMI_3', label: 'HDMI 3', appId: 'com.webos.app.hdmi3', connected: false },
       { id: 'HDMI_4', label: 'HDMI 4', appId: 'com.webos.app.hdmi4', connected: false }
     ];
-    state.smart = SMART_FALLBACK.map((d, i) => Object.assign({}, d, { online: true,
-      state: i === 1 || i === 2 ? 'on' : 'off', brightness: d.type === 'light' ? 70 : null, color: i === 1 ? '#ffa657' : (d.type === 'light' ? '#ffc18e' : null) }));
+    const q = {};
+    location.search.replace(/^\?/, '').split('&').forEach(kv => { if (kv) { const [k, v] = kv.split('='); q[decodeURIComponent(k)] = decodeURIComponent(v || '1'); } });
+    const long = q.long === '1';
+    let fake = SMART_FALLBACK.map((d, i) => Object.assign({}, d, {
+      name: long && i === 0 ? 'Stehlampe neben dem großen Sofa am Fenster' : d.name,
+      room: long && i === 4 ? 'Wintergarten und Terrasse im Erdgeschoss' : d.room,
+      online: q.smart === 'offline' ? false : !(q.smart === 'mixed' && (i === 0 || i === 6)),
+      state: i === 1 || i === 2 ? 'on' : 'off', brightness: d.type === 'light' ? 70 : null, kelvin: null,
+      color: i === 1 ? '#ffa657' : (d.type === 'light' ? '#ffc18e' : null),
+      capabilities: d.type === 'light' ? (i === 0 ? ['brightness', 'white'] : ['brightness', 'color', 'white']) : []
+    }));
+    if (q.smart === 'none') fake = [];
+    const calls = [];
+    window.__previewCalls = calls;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const day = i => new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
+    const WEATHER = { current: { temperature_2m: 4.3, apparent_temperature: 1.2, weather_code: 2 },
+      daily: { time: [0, 1, 2, 3, 4].map(day), weather_code: [2, 61, 3, 0, 71], temperature_2m_max: [7.1, 6, 8.4, 9, 3],
+        temperature_2m_min: [0.6, 2, 3.1, 1, -2], precipitation_probability_max: [10, 80, 35, 5, 60] } };
+    previewApi = async (path, body, ms) => {
+      calls.push(path + (body ? ' ' + JSON.stringify(body) : ''));
+      const limit = ms || 6000;
+      const answer = async (delay, fn) => {
+        if (delay > limit) { await wait(limit); throw Object.assign(new Error('aborted'), { name: 'AbortError' }); }
+        await wait(delay);
+        return fn();
+      };
+      if (q.backend === 'offline') { await wait(30); throw new TypeError('Failed to fetch'); }
+      const slow = q.backend === 'slow' ? 9000 : 0;
+      if (path === '/api/smarthome/devices') return answer(slow || Number(q.smartdelay || 250), () => JSON.parse(JSON.stringify(fake)));
+      if (path === '/api/smarthome/set') {
+        return answer(slow || 220, () => {
+          const d = fake.find(x => x.id === body.id);
+          if (!d) return { status: 'error', error: 'Unbekanntes Gerät' };
+          if (d.online === false) return { status: 'error', error: d.name + ' nicht erreichbar (timeout)' };
+          d.state = body.state === 'on' ? 'on' : 'off';
+          if (body.brightness != null) d.brightness = body.brightness;
+          if (body.color) { d.color = body.color; d.kelvin = null; }
+          if (body.kelvin) { d.kelvin = body.kelvin; d.color = kelvinHex(body.kelvin); }
+          return { status: 'ok', state: d.state };
+        });
+      }
+      if (path === '/api/weather') return answer(slow || 120, () => (q.weather === 'error' ? { error: 'timed out' } : WEATHER));
+      if (path === '/api/quick') return answer(slow || 100, () => ({ success: true, action: body.action }));
+      if (path === '/api/command') {
+        if (q.gemini === 'error') { await wait(300); throw new TypeError('Failed to fetch'); }
+        return answer(q.gemini === 'slow' ? 60000 : 900, () => ({
+          text: 'Hier sind drei Tipps für heute Abend:\n\n- **Dark** (Netflix) – verschachtelte Zeitreise-Serie\n- **Severance** (Apple TV) – Büro-Thriller\n' +
+            '- **The Bear** (Disney+) – Küchen-Drama in hohem Tempo\n\nIch habe außerdem das Licht gedimmt.',
+          actions: [{ tool: 'control_smart_device', args: { device_name: 'Fernseher Bar', brightness: 30 }, result: { success: true } }],
+          suggestions: ['Mehr wie Dark', 'Etwas Lustiges', 'Nur Filme']
+        }));
+      }
+      return answer(50, () => ({ error: 'Not found' }));
+    };
+    if (q.apps === 'none') previewNoApps = true;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1917,29 +2224,35 @@
   };
 
   let lastWeather = null;          // raw forecast, also used as context for Gemini
+  let weatherFailed = false;       // the last update failed (backend down or open-meteo error)
   async function fetchWeather(manual) {
-    if (!IS_TV) {
-      updateWeatherUI({ current: { temperature_2m: 4.3, apparent_temperature: 1, weather_code: 1 }, daily: { precipitation_probability_max: [10] } });
-      return;
-    }
-    try {
-      const data = await api('/api/weather', undefined, 8000);
-      if (data && data.current) { lastWeather = data; updateWeatherUI(data); if (manual) toast('Wetter aktualisiert'); }
-      else if (manual) toast('Wetter gerade nicht verfügbar');
-    } catch (e) { if (manual) toast('Wetter gerade nicht verfügbar'); }
+    let data = null;
+    try { data = await api('/api/weather', undefined, 8000); } catch (e) { data = null; }
+    const ok = !!(data && data.current && num(data.current.temperature_2m));
+    weatherFailed = !ok;
+    if (ok) lastWeather = data;
+    updateWeatherUI(lastWeather);
+    if (manual) toast(ok ? 'Wetter aktualisiert' : 'Wetter gerade nicht verfügbar');
+    if (bbKey === 'hero:weather') showBillboard(bbKey, false);
   }
 
   function updateWeatherUI(data) {
-    const cur = data.current;
-    if (!cur) return;
-    const hour = new Date().getHours();
-    let [icon, desc] = WMO_MAP[cur.weather_code] || ['cloud', 'Bewölkt'];
-    if ((hour >= 20 || hour < 6) && (icon === 'sun' || icon === 'partly')) icon = cur.weather_code === 0 ? 'night' : 'cloud';
+    const cur = data && data.current;
     const iconEl = $('w-icon');
+    let icon = 'cloud', title = '–°', sub = weatherFailed ? 'nicht verfügbar' : 'Musterstadt';
+    if (cur && num(cur.temperature_2m)) {
+      const hour = new Date().getHours();
+      let desc;
+      [icon, desc] = WMO_MAP[cur.weather_code] || ['cloud', 'Bewölkt'];
+      if ((hour >= 20 || hour < 6) && (icon === 'sun' || icon === 'partly')) icon = cur.weather_code === 0 ? 'night' : 'cloud';
+      title = Math.round(cur.temperature_2m) + '°';
+      const rain = at(data.daily && data.daily.precipitation_probability_max, 0);
+      sub = desc + (rain >= 30 ? ' · ' + Math.round(rain) + ' % Regen' : '');
+    }
     if (iconEl.dataset.icon !== icon) { iconEl.dataset.icon = icon; iconEl.innerHTML = svg(icon); }
-    $('w-temp').textContent = Math.round(cur.temperature_2m) + '° Musterstadt';
-    const rain = data.daily && data.daily.precipitation_probability_max && data.daily.precipitation_probability_max[0];
-    $('w-sub').textContent = desc + (rain >= 30 ? ' · ' + rain + ' % Regen' : '');
+    weatherEl.classList.toggle('stale', weatherFailed);
+    $('w-temp').textContent = title;
+    $('w-sub').textContent = sub;
     layoutDirty = true;
   }
 
@@ -2015,17 +2328,20 @@
 
   function weatherContext() {
     const w = lastWeather;
-    if (!w || !w.current) return 'Aktuelle Wetterdaten sind gerade nicht verfügbar.';
+    if (!w || !w.current || !num(w.current.temperature_2m)) return 'Aktuelle Wetterdaten sind gerade nicht verfügbar.';
     const desc = (WMO_MAP[w.current.weather_code] || ['', 'unbekannt'])[1];
-    let s = 'Wetter jetzt: ' + Math.round(w.current.temperature_2m) + ' °C (gefühlt ' +
-      Math.round(w.current.apparent_temperature) + ' °C), ' + desc + '.';
-    const d = w.daily;
-    if (d && d.temperature_2m_max) {
-      const day = (i, n) => ' ' + n + ': ' + Math.round(d.temperature_2m_min[i]) + ' bis ' + Math.round(d.temperature_2m_max[i]) +
-        ' °C, ' + ((WMO_MAP[d.weather_code[i]] || ['', ''])[1]) + ', Regenrisiko ' + (d.precipitation_probability_max[i] || 0) + ' %.';
-      s += day(0, 'Heute');
-      if (d.temperature_2m_max.length > 1) s += day(1, 'Morgen');
-    }
+    let s = 'Wetter jetzt: ' + Math.round(w.current.temperature_2m) + ' °C' +
+      (num(w.current.apparent_temperature) ? ' (gefühlt ' + Math.round(w.current.apparent_temperature) + ' °C)' : '') + ', ' + desc + '.';
+    const d = w.daily || {};
+    const day = (i, n) => {
+      const lo = at(d.temperature_2m_min, i), hi = at(d.temperature_2m_max, i);
+      if (lo == null || hi == null) return '';
+      const rain = at(d.precipitation_probability_max, i);
+      return ' ' + n + ': ' + Math.round(lo) + ' bis ' + Math.round(hi) + ' °C, ' + ((WMO_MAP[at(d.weather_code, i)] || ['', ''])[1]) +
+        (rain != null ? ', Regenrisiko ' + Math.round(rain) + ' %' : '') + '.';
+    };
+    s += day(0, 'Heute') + day(1, 'Morgen');
+    if (weatherFailed) s += ' (Stand von vorhin.)';
     return s;
   }
 
@@ -2033,24 +2349,24 @@
 
   // Topic rows. prompt() runs on click, so it uses the current apps / weather / time.
   const GM_TOPICS = [
-    { label: 'Film-Tipps', items: [
-      { ico: '🌙', text: 'Was schaue ich heute?', prompt: () => 'Es ist ' + timeOfDay() + '. Empfiehl mir 3 Filme oder Serien für heute, die es auf meinen Diensten gibt: ' + streamingApps() + '. Nenne bei jedem den Dienst.' },
-      { ico: '🆕', text: 'Neue Serien', prompt: () => 'Welche neuen oder gerade beliebten Serien lohnen sich auf ' + streamingApps() + '? 3 Tipps mit Dienst und je einem Satz Begründung.' },
-      { ico: '🍿', text: 'Spannender Film', prompt: () => 'Empfiehl mir 3 spannende Filme (Thriller oder Action) auf ' + streamingApps() + '. Nenne jeweils den Dienst.' },
-      { ico: '😄', text: 'Was Leichtes', prompt: () => 'Ich will abschalten: 3 lustige oder entspannte Filme oder Serien auf ' + streamingApps() + ', mit Dienst.' },
-      { ico: '🌍', text: 'Dokus', prompt: () => 'Empfiehl mir 3 sehenswerte Dokumentationen auf ' + streamingApps() + ', mit Dienst.' }
+    { label: 'Film-Tipps', icon: 'film', items: [
+      { ico: 'moon', text: 'Was schaue ich heute?', prompt: () => 'Es ist ' + timeOfDay() + '. Empfiehl mir 3 Filme oder Serien für heute, die es auf meinen Diensten gibt: ' + streamingApps() + '. Nenne bei jedem den Dienst.' },
+      { ico: 'news', text: 'Neue Serien', prompt: () => 'Welche neuen oder gerade beliebten Serien lohnen sich auf ' + streamingApps() + '? 3 Tipps mit Dienst und je einem Satz Begründung.' },
+      { ico: 'film', text: 'Spannender Film', prompt: () => 'Empfiehl mir 3 spannende Filme (Thriller oder Action) auf ' + streamingApps() + '. Nenne jeweils den Dienst.' },
+      { ico: 'smile', text: 'Was Leichtes', prompt: () => 'Ich will abschalten: 3 lustige oder entspannte Filme oder Serien auf ' + streamingApps() + ', mit Dienst.' },
+      { ico: 'globe', text: 'Dokus', prompt: () => 'Empfiehl mir 3 sehenswerte Dokumentationen auf ' + streamingApps() + ', mit Dienst.' }
     ] },
-    { label: 'Wetter & Tag', items: [
-      { ico: '🧥', text: 'Was ziehe ich an?', prompt: () => weatherContext() + ' Was soll ich heute anziehen? Kurz und konkret.' },
-      { ico: '🚶', text: 'Lohnt sich rausgehen?', prompt: () => weatherContext() + ' Es ist ' + timeOfDay() + '. Lohnt sich jetzt ein Spaziergang oder eher später? Kurz.' },
-      { ico: '📅', text: 'Heute & morgen', prompt: () => weatherContext() + ' Fasse das Wetter für heute und morgen kurz und anschaulich zusammen.' },
-      { ico: '✨', text: 'Idee für den Abend', prompt: () => weatherContext() + ' Es ist ' + timeOfDay() + '. Schlag mir 3 Ideen für den Abend vor, passend zum Wetter.' }
+    { label: 'Wetter & Tag', icon: 'partly', items: [
+      { ico: 'shirt', text: 'Was ziehe ich an?', prompt: () => weatherContext() + ' Was soll ich heute anziehen? Kurz und konkret.' },
+      { ico: 'walk', text: 'Lohnt sich rausgehen?', prompt: () => weatherContext() + ' Es ist ' + timeOfDay() + '. Lohnt sich jetzt ein Spaziergang oder eher später? Kurz.' },
+      { ico: 'calendar', text: 'Heute & morgen', prompt: () => weatherContext() + ' Fasse das Wetter für heute und morgen kurz und anschaulich zusammen.' },
+      { ico: 'spark', text: 'Idee für den Abend', prompt: () => weatherContext() + ' Es ist ' + timeOfDay() + '. Schlag mir 3 Ideen für den Abend vor, passend zum Wetter.' }
     ] },
-    { label: 'Wissen & Rezepte', items: [
-      { ico: '🎲', text: 'Fakt des Tages', prompt: () => 'Erzähle mir einen verblüffenden, wenig bekannten Fakt. Kurz und spannend erklärt.' },
-      { ico: '🍳', text: 'Schnelles Rezept', prompt: () => 'Schlage ein raffiniertes Abendessen vor, das in unter 20 Minuten fertig ist. Zutaten und Schritte kurz.' },
-      { ico: '💡', text: 'Erklär mir was', prompt: () => 'Erkläre mir ein spannendes Thema aus Wissenschaft oder Technik in 5 Sätzen, so dass es jeder versteht.' },
-      { ico: '🧠', text: 'Quizfrage', prompt: () => 'Stell mir eine knifflige Quizfrage mit 3 Antwortmöglichkeiten (A, B, C). Verrate die Lösung noch nicht.' }
+    { label: 'Wissen & Rezepte', icon: 'bulb', items: [
+      { ico: 'dice', text: 'Fakt des Tages', prompt: () => 'Erzähle mir einen verblüffenden, wenig bekannten Fakt. Kurz und spannend erklärt.' },
+      { ico: 'pan', text: 'Schnelles Rezept', prompt: () => 'Schlage ein raffiniertes Abendessen vor, das in unter 20 Minuten fertig ist. Zutaten und Schritte kurz.' },
+      { ico: 'bulb', text: 'Erklär mir was', prompt: () => 'Erkläre mir ein spannendes Thema aus Wissenschaft oder Technik in 5 Sätzen, so dass es jeder versteht.' },
+      { ico: 'brain', text: 'Quizfrage', prompt: () => 'Stell mir eine knifflige Quizfrage mit 3 Antwortmöglichkeiten (A, B, C). Verrate die Lösung noch nicht.' }
     ] }
   ];
 
@@ -2081,17 +2397,19 @@
   function chip(ico, text, cls, onClick) {
     const b = document.createElement('button');
     b.className = 'gm-chip' + (cls ? ' ' + cls : '');
-    b.innerHTML = (ico ? '<span class="gm-ico">' + ico + '</span>' : '') + '<span>' + esc(text) + '</span>';
+    b.tabIndex = -1;
+    b.innerHTML = (ico ? '<span class="gm-ico">' + svg(ico) + '</span>' : '') + '<span class="gm-chip-text">' + esc(text) + '</span>';
     b.addEventListener('click', onClick);
     return b;
   }
 
-  function row(label, chips) {
+  function row(label, chips, icon) {
     const r = document.createElement('div');
     r.className = 'gm-row';
     const l = document.createElement('div');
     l.className = 'gm-row-label';
-    l.textContent = label || '';
+    if (icon) l.innerHTML = '<span class="gm-row-ico">' + svg(icon) + '</span>';
+    l.appendChild(document.createTextNode(label || ''));
     r.appendChild(l);
     chips.forEach(c => r.appendChild(c));
     return r;
@@ -2100,18 +2418,21 @@
   function showTopicChips() {
     geminiChipsEl.innerHTML = '';
     for (const t of GM_TOPICS) {
-      geminiChipsEl.appendChild(row(t.label, t.items.map(it => chip(it.ico, it.text, '', () => askGemini(it.prompt(), it.text)))));
+      geminiChipsEl.appendChild(row(t.label, t.items.map(it => chip(it.ico, it.text, '', () => askGemini(it.prompt(), it.text))), t.icon));
     }
   }
 
-  function showFollowUps(suggestions) {
+  // after an answer: follow-up questions; after a failure: try the same question again
+  function showFollowUps(suggestions, retry) {
     geminiChipsEl.innerHTML = '';
-    const sug = (suggestions || []).map(s => chip('↳', s, 'gm-suggest', () => askGemini(s, s)));
-    if (sug.length) geminiChipsEl.appendChild(row('Nachfragen', sug));
-    geminiChipsEl.appendChild(row('', [
-      chip('🔄', 'Andere Vorschläge', 'gm-ghost', () => askGemini('Bitte gib mir andere, neue Vorschläge dazu.', 'Andere Vorschläge')),
-      chip('✦', 'Neues Thema', 'gm-ghost', resetGeminiChat)
-    ]));
+    const sug = (suggestions || []).filter(x => typeof x === 'string' && x.trim()).slice(0, 4)
+      .map(x => chip('reply', x, 'gm-suggest', () => askGemini(x, x)));
+    if (sug.length) geminiChipsEl.appendChild(row('Nachfragen', sug, 'reply'));
+    const more = [];
+    if (retry) more.push(chip('refresh', 'Erneut versuchen', 'gm-suggest', () => askGemini(retry.prompt, retry.label, true)));
+    else if (gmHistory.length) more.push(chip('refresh', 'Andere Vorschläge', 'gm-ghost', () => askGemini('Bitte gib mir andere, neue Vorschläge dazu.', 'Andere Vorschläge')));
+    more.push(chip('spark', 'Neues Thema', 'gm-ghost', resetGeminiChat));
+    geminiChipsEl.appendChild(row('', more));
   }
 
   function gmFocusables() {
@@ -2127,14 +2448,19 @@
     gmReq++;
     gmHistory = [];
     gmBusy = false;
-    geminiChatEl.innerHTML = '<div class="gm-hello"><h1>Hallo! Worauf hast du Lust?</h1>' +
-      '<p>Wähle ein Thema – danach schlage ich dir passende Nachfragen vor.</p></div>';
+    geminiModalEl.classList.add('gm-start');
+    geminiChatEl.innerHTML = '<div class="gm-hello"><span class="gm-hello-mark">' + GEMINI_ICON + '</span>' +
+      '<h1>Worauf hast du Lust?</h1>' +
+      '<p>Wähle ein Thema – danach schlage ich passende Nachfragen vor.</p></div>';
     showTopicChips();
     focusFirstChip();
   }
 
   function openGeminiModal() {
     if (geminiModalOpen) return;
+    // a long OK on the pill opens Gemini while OK is still down; its key-up goes to Gemini, so the
+    // hub's OK state must not wait for it (it stayed "held" and swallowed every arrow key afterwards)
+    okDown = false; okLong = false; clearTimeout(okTimer); pressed(false);
     geminiModalOpen = true;
     geminiModalEl.style.display = 'flex';
     resetGeminiChat();
@@ -2149,38 +2475,57 @@
     gmBusy = false;
     geminiModalEl.classList.remove('gm-in');
     geminiModalEl.style.display = 'none';
+    if (document.activeElement && document.activeElement !== document.body && geminiModalEl.contains(document.activeElement)) document.activeElement.blur();
   }
 
   function toggleGeminiModal() {
     if (geminiModalOpen) closeGeminiModal(); else openGeminiModal();
   }
 
-  async function askGemini(promptText, label) {
+  // what Gemini did, in words (the backend reports tool names)
+  const GM_TOOLS = {
+    launch_app: a => (a.app_name ? String(a.app_name) + ' geöffnet' : 'App geöffnet'),
+    switch_input: a => 'Eingang ' + (a.input_name ? String(a.input_name).toUpperCase() : '') + ' gewählt',
+    volume_up: () => 'Lauter', volume_down: () => 'Leiser', toggle_mute: () => 'Stumm umgeschaltet',
+    screen_off: () => 'Display aus', screen_on: () => 'Display an', screensaver: () => 'Bildschirmschoner',
+    media_control: a => 'Wiedergabe: ' + (a.action || ''), get_tv_status: () => 'TV-Status gelesen', show_toast: () => 'Hinweis gezeigt',
+    control_smart_device: a => (a.device_name || 'Gerät') + ' ' + (typeof a.brightness === 'number' ? Math.round(a.brightness) + ' %' : (a.state === 'on' ? 'an' : a.state === 'off' ? 'aus' : 'geschaltet'))
+  };
+  function actionLabel(x) {
+    const f = GM_TOOLS[x && x.tool];
+    try { return f ? f(x.args || {}) : String((x && x.tool) || 'Aktion'); } catch (e) { return String(x.tool); }
+  }
+  const actionFailed = r => !!r && typeof r === 'object' && (r.success === false || r.status === 'error' || (!!r.error && r.success !== true));
+
+  async function askGemini(promptText, label, isRetry) {
     if (!promptText || gmBusy) return;
     gmBusy = true;
     const req = ++gmReq;
-    if (!gmHistory.length) geminiChatEl.innerHTML = '';
-    const q = document.createElement('div');
-    q.className = 'gm-q';
-    q.textContent = label || promptText;
-    geminiChatEl.appendChild(q);
+    geminiModalEl.classList.remove('gm-start');
+    if (!gmHistory.length && !isRetry) geminiChatEl.innerHTML = '';
+    if (isRetry) { const last = geminiChatEl.lastElementChild; if (last && last.classList.contains('gm-err')) last.remove(); }
+    let q = null;
+    if (!isRetry) {
+      q = document.createElement('div');
+      q.className = 'gm-q';
+      q.textContent = label || promptText;
+      geminiChatEl.appendChild(q);
+    }
     const thinking = document.createElement('div');
     thinking.className = 'gm-thinking';
     thinking.innerHTML = '<span></span><span></span><span></span>';
     geminiChatEl.appendChild(thinking);
-    q.scrollIntoView({ block: 'start' });
+    if (q) q.scrollIntoView({ block: 'start' });
     gmFocusables().forEach(b => { b.disabled = true; });
 
-    let data = null, failed = false;
+    let data = null, failed = '';
     try {
-      const res = await fetch('http://127.0.0.1:8080/api/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptText, history: gmHistory })
-      });
-      data = await res.json();
+      // a bounded wait: a hanging backend used to leave the dots spinning and every chip disabled for good
+      data = await api('/api/command', { prompt: promptText, history: gmHistory }, 45000);
+      if (!data || typeof data !== 'object') failed = 'Keine Antwort erhalten.';
+      else if (typeof data.text !== 'string' && data.error) failed = String(data.error);
     } catch (e) {
-      failed = true;
+      failed = e && e.name === 'AbortError' ? 'Gemini hat zu lange gebraucht. Versuch es noch einmal.' : 'Der Gemini-Dienst auf dem TV ist gerade nicht erreichbar.';
     }
     if (req !== gmReq) return;                 // popup closed or reset meanwhile
     gmBusy = false;
@@ -2188,29 +2533,34 @@
 
     const a = document.createElement('div');
     a.className = 'gm-a' + (failed ? ' gm-err' : '');
+    a.innerHTML = '<span class="gm-a-mark">' + (failed ? svg('close') : GEMINI_ICON) + '</span>';
+    const body = document.createElement('div');
+    body.className = 'gm-a-body';
+    a.appendChild(body);
     if (failed) {
-      a.textContent = 'Der Gemini-Dienst auf dem TV ist gerade nicht erreichbar.';
+      body.textContent = failed;
     } else {
-      a.innerHTML = renderAnswer(data.text || 'Keine Antwort erhalten.');
-      if (Array.isArray(data.actions) && data.actions.length) {
-        const acts = document.createElement('div');
-        acts.className = 'gm-acts';
-        data.actions.forEach(x => {
+      body.innerHTML = renderAnswer(data.text || 'Keine Antwort erhalten.');
+      const acts = Array.isArray(data.actions) ? data.actions.filter(x => x && x.tool) : [];
+      if (acts.length) {
+        const box = document.createElement('div');
+        box.className = 'gm-acts';
+        acts.forEach(x => {
+          const bad = actionFailed(x.result);
           const t = document.createElement('span');
-          t.className = 'gm-act';
-          t.textContent = '⚡ ' + x.tool;
-          acts.appendChild(t);
+          t.className = 'gm-act' + (bad ? ' bad' : '');
+          t.innerHTML = svg(bad ? 'close' : 'check');
+          t.appendChild(document.createTextNode(actionLabel(x)));
+          box.appendChild(t);
         });
-        a.appendChild(acts);
+        body.appendChild(box);
       }
       gmHistory.push({ role: 'user', text: promptText }, { role: 'model', text: data.text || '' });
-      if (Array.isArray(data.actions) && data.actions.some(x => x.tool && (x.tool.includes('smart') || x.tool.includes('screen')))) {
-        setTimeout(fetchSmartDevices, 1200);
-      }
+      if (acts.some(x => /smart|screen/.test(String(x.tool)))) setTimeout(fetchSmartDevices, 1200);
     }
     geminiChatEl.appendChild(a);
-    q.scrollIntoView({ block: 'start' });
-    showFollowUps(failed ? [] : data.suggestions);
+    (q || a).scrollIntoView({ block: 'start' });
+    showFollowUps(failed ? [] : data.suggestions, failed ? { prompt: promptText, label } : null);
     focusFirstChip();
   }
 
@@ -2262,7 +2612,7 @@
 
   function handleGeminiParam(p) {
     if (!p || !p.gemini) return false;
-    if (mode === 'menu' || mode === 'picker') closeMenu();
+    if (mode === 'menu') closeMenu();
     if (mode === 'move') endMove();
     if (p.gemini === 'toggle') toggleGeminiModal(); else openGeminiModal();
     return true;
@@ -2272,6 +2622,9 @@
     activateApp();
     tick();
     $('g-icon').innerHTML = GEMINI_ICON;
+    $('gm-spark').innerHTML = GEMINI_ICON;
+    $('gm-mic').innerHTML = svg('mic');
+    geminiCloseBtn.innerHTML = svg('close');
     for (const [id, el] of PILLS) { el.dataset.id = id; el.dataset.key = id; els.set(id, el); bindPointer(el); }
     initGeminiUI();
     initSoundOutput();
@@ -2310,7 +2663,9 @@
     get rows() { return rows.map(r => r.key + ': ' + r.ids.join(', ')); }, get favs() { return favIds.slice(); },
     get tiles() { return tileIds.slice(); }, get scrollY() { return scrollY; }, get billboard() { return bbKey; },
     setUsage(u) { state.usage = u; render(); }, get prefs() { return clone(prefs); },
-    get menu() { return menu ? menu.entries.map(e => e.label) : null; }
+    get menu() { return menu ? menu.entries.map(e => e.label) : null; },
+    get menuIndex() { return menu ? menu.index : -1; }, get menuTitle() { return menu ? $('menu-title').textContent : null; },
+    get gemini() { return geminiModalOpen; }, get okDown() { return okDown; }
   };
 
   start();

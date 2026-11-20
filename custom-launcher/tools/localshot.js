@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Render a local page in headless Edge at TV size and drive it like a remote control.
-// Used to preview/test the launcher on the PC (no downloads, only the Edge that ships with Windows).
-// Run through tools/localshot.sh.
+// Render a local page in a headless Chromium (Edge on Windows) at TV size and drive it like a remote control.
+// Used to preview/test the launcher on the PC (no downloads: on Windows the Edge that ships with it, on Linux/macOS
+// any installed Chromium/Chrome/Edge). Run through tools/localshot.sh.
 //
 //   localshot.sh <file.html | url> [options] <step> <step> ...
 //
@@ -20,7 +20,8 @@
 // Options:
 //   --dpr <n>        device pixel ratio (default 1; the TV uses 2 -> 3840x2160 screenshots)
 //   --size <WxH>     viewport in CSS px (default 1920x1080)
-//   --browser <exe>  browser executable (default: Edge)
+//   --browser <exe>  browser executable. Default: $LOCALSHOT_BROWSER, else Edge on Windows, else the first
+//                    chromium/chrome/edge found in PATH or the usual install folders (Playwright's too)
 //   --strict         exit with code 1 if the page logged an error or threw an exception
 'use strict';
 const fs = require('fs');
@@ -37,8 +38,30 @@ const KEYS = {
 };
 
 const args = process.argv.slice(2);
-const opt = { dpr: 1, w: 1920, h: 1080, strict: false,
-  browser: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' };
+const opt = { dpr: 1, w: 1920, h: 1080, strict: false, browser: null };
+
+// Browser: --browser, $LOCALSHOT_BROWSER, Edge on Windows, otherwise the first Chromium-like browser found.
+function findBrowser() {
+  if (process.env.LOCALSHOT_BROWSER) return process.env.LOCALSHOT_BROWSER;
+  if (process.platform === 'win32') return 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+  const names = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'chrome', 'microsoft-edge', 'msedge'];
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    for (const n of names) { const f = path.join(dir, n); try { fs.accessSync(f, fs.constants.X_OK); return f; } catch (e) { /* next */ } }
+  }
+  const fixed = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/opt/google/chrome/chrome', '/snap/bin/chromium'];
+  for (const f of fixed) if (fs.existsSync(f)) return f;
+  // Playwright's browsers (e.g. /opt/pw-browsers/chromium-1234/chrome-linux64/chrome or ~/.cache/ms-playwright/...)
+  const roots = [process.env.PLAYWRIGHT_BROWSERS_PATH, '/opt/pw-browsers', path.join(os.homedir(), '.cache', 'ms-playwright')].filter(Boolean);
+  for (const root of roots) {
+    let dirs = [];
+    try { dirs = fs.readdirSync(root).filter(d => /^chromium-\d+$/.test(d)).sort().reverse(); } catch (e) { continue; }
+    for (const d of dirs) {
+      for (const sub of ['chrome-linux64/chrome', 'chrome-linux/chrome']) { const f = path.join(root, d, sub); if (fs.existsSync(f)) return f; }
+    }
+  }
+  return null;
+}
 let target = null; const steps = [];
 while (args.length) {
   const a = args.shift();
@@ -49,7 +72,9 @@ while (args.length) {
   else if (!target) target = a;
   else steps.push(a);
 }
-if (!target) { console.error('usage: localshot.sh <file.html|url> [--dpr n] [--size WxH] [--strict] step...'); process.exit(2); }
+if (!target) { console.error('usage: localshot.sh <file.html|url> [--dpr n] [--size WxH] [--browser exe] [--strict] step...'); process.exit(2); }
+if (!opt.browser) opt.browser = findBrowser();
+if (!opt.browser) { console.error('localshot: no Chromium/Chrome/Edge found; pass --browser <exe> or set LOCALSHOT_BROWSER'); process.exit(2); }
 // Allow "file.html?query#hash" for local files.
 let url;
 if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) url = target;
@@ -65,8 +90,14 @@ const child = spawn(opt.browser, [
   '--headless=new', '--remote-debugging-port=' + port, '--user-data-dir=' + profile,
   '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
   '--allow-file-access-from-files', '--disable-extensions', '--disable-features=Translate',
-  '--window-size=' + opt.w + ',' + opt.h, 'about:blank'
-], { stdio: 'ignore' });
+  '--window-size=' + opt.w + ',' + opt.h
+].concat(
+  // Chromium refuses to start as root without --no-sandbox (containers, CI)
+  typeof process.getuid === 'function' && process.getuid() === 0 ? ['--no-sandbox'] : [],
+  process.platform === 'linux' ? ['--disable-gpu', '--disable-dev-shm-usage'] : [],
+  ['about:blank']
+), { stdio: 'ignore' });
+child.on('error', e => { console.error('localshot: cannot start ' + opt.browser + ': ' + e.message); cleanup(1); });
 
 let pageErrors = 0;
 function cleanup(code) {
@@ -79,13 +110,16 @@ function cleanup(code) {
 process.on('uncaughtException', e => { console.error('localshot error: ' + e.message); cleanup(1); });
 
 (async () => {
-  let pages = null;
-  for (let i = 0; i < 80 && !pages; i++) {
-    try { pages = await (await fetch('http://127.0.0.1:' + port + '/json')).json(); }
-    catch (e) { await sleep(150); }
+  // the DevTools endpoint can answer before the first tab exists: wait for a page target, not just for /json
+  let page = null;
+  for (let i = 0; i < 100 && !page; i++) {
+    try {
+      const list = await (await fetch('http://127.0.0.1:' + port + '/json')).json();
+      page = Array.isArray(list) ? list.find(p => p.type === 'page' && p.webSocketDebuggerUrl) : null;
+    } catch (e) { /* not up yet */ }
+    if (!page) await sleep(150);
   }
-  if (!pages) throw new Error('browser did not start (' + opt.browser + ')');
-  const page = pages.find(p => p.type === 'page');
+  if (!page) throw new Error('browser did not start (' + opt.browser + ')');
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   let id = 0; const pending = new Map(); let loadResolve = null;
   const send = (method, params = {}) => new Promise((resolve, reject) => {
