@@ -5,12 +5,15 @@ audio output switching (Denon AVR / TV Speaker / BT), direct text input, and lau
 """
 
 import os
+import re
 import subprocess
 import json
 import base64
 import time
 import glob
-from typing import Dict, Any, Optional, List
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Any, Optional, List, Tuple
 
 TV_HOST = os.environ.get("TV_HOST", "root@192.168.178.60")
 if TV_HOST.startswith("-"):  # would be parsed as an ssh option
@@ -117,8 +120,21 @@ KEY_MAP = {
     "5": "5", "6": "6", "7": "7", "8": "8", "9": "9"
 }
 
+# The URI is part of a remote shell command in SSH mode: only plain luna:// paths are accepted.
+_LUNA_URI = re.compile(r"^luna://[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$")
+APP_DIR = "/media/developer/apps/usr/palm/applications/com.custom.launcher"
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_DEV_APP_DIR = os.path.join(_HERE, "..", "custom-launcher", "com.custom.launcher")
+USAGE_FILE = "/var/lib/webosbrew/custom-launcher-usage.json"
+USAGE_HALF_LIFE = 45 * 86400        # same decay as launcherd.py
+ICON_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+              ".webp": "image/webp", ".gif": "image/gif"}     # no SVG: it could carry script
+
+
 def luna_call(uri: str, payload: dict, timeout: int = 5) -> dict:
-    """Executes a Luna call either locally or via SSH with multiplexing."""
+    """Executes a Luna call either locally or via SSH with multiplexing. Never raises."""
+    if not _LUNA_URI.match(uri):
+        return {"returnValue": False, "error": "invalid luna uri"}
     payload_json = json.dumps(payload)
     if IS_LOCAL:
         cmd = ["luna-send", "-i", "-n", "1", uri, payload_json]
@@ -155,6 +171,8 @@ def luna_call(uri: str, payload: dict, timeout: int = 5) -> dict:
 
 def luna_fire(uri: str, payload: dict) -> bool:
     """Fires a Luna call asynchronously without waiting for reply (sub-millisecond return)."""
+    if not _LUNA_URI.match(uri):
+        return False
     payload_json = json.dumps(payload)
     try:
         if IS_LOCAL:
@@ -182,15 +200,59 @@ def send_key(key: str, fast: bool = False) -> bool:
     res = luna_call("luna://com.webos.service.networkinput/sendSpecialKey", payload)
     return res.get("returnValue", False)
 
+STATUS_TTL = 1.0            # s; see LGTV.get_status_cached
+_status_lock = threading.Lock()
+_status_cache: Dict[str, Any] = {"data": None, "at": 0.0, "gen": 0}
+_pool = ThreadPoolExecutor(max_workers=6)   # only runs single luna calls (never nested)
+_net_cache: Dict[str, Any] = {}
+
+
+def _luna_many(calls: List[Tuple[str, dict]], timeout: int = 5) -> List[dict]:
+    """Run several luna_call()s in parallel; results in the same order."""
+    futures = [_pool.submit(luna_call, uri, payload, timeout) for uri, payload in calls]
+    out = []
+    for f in futures:
+        try:
+            out.append(f.result(timeout=timeout + 3))
+        except Exception as e:
+            out.append({"returnValue": False, "error": type(e).__name__})
+    return out
+
+
+def _audio_status(sound_out: dict, vol_info: dict) -> Dict[str, Any]:
+    output_val = sound_out.get("soundOutput", "external_optical")
+    if not isinstance(output_val, str):
+        output_val = "external_optical"
+    is_denon = "optical" in output_val.lower()
+    is_tv = "speaker" in output_val.lower() and not is_denon
+
+    return {
+        "soundOutput": output_val,
+        "volume": vol_info.get("volume", 0),
+        "muted": vol_info.get("muted", False),
+        "is_denon_optical": is_denon,
+        "is_tv_speaker": is_tv,
+        "display_title": "Denon AVR-1803 (Optisch)" if is_denon else ("TV-Lautsprecher" if is_tv else output_val)
+    }
+
+
 class LGTV:
     @staticmethod
     def get_status() -> Dict[str, Any]:
-        """Returns power state, screen state, foreground app, audio state, and network info."""
-        fg = luna_call("luna://com.webos.applicationManager/getForegroundAppInfo", {})
-        power = luna_call("luna://com.webos.service.tvpower/power/getPowerState", {})
+        """Returns power state, screen state, foreground app, audio state, and network info.
+
+        The four luna calls run in parallel: the answer takes as long as the slowest one,
+        not as long as all four together (each spawns a luna-send on a busy TV).
+        """
+        fg, power, sound_out, vol_info = _luna_many([
+            ("luna://com.webos.applicationManager/getForegroundAppInfo", {}),
+            ("luna://com.webos.service.tvpower/power/getPowerState", {}),
+            ("luna://com.webos.service.audio/getSoundOutput", {}),
+            ("luna://com.webos.service.audio/getVolume", {}),
+        ])
         power_state = power.get("state", "Unknown")
-        is_screen_off = (power_state.lower() in ["screen off", "screen_off", "display off"])
-        audio = LGTV.get_audio_status()
+        is_screen_off = (str(power_state).lower() in ["screen off", "screen_off", "display off"])
+        audio = _audio_status(sound_out, vol_info)
         net = LGTV.get_network_info()
 
         return {
@@ -203,14 +265,50 @@ class LGTV:
         }
 
     @staticmethod
+    def get_status_cached(max_age: float = STATUS_TTL) -> Dict[str, Any]:
+        """get_status(), shared by requests that arrive within max_age seconds of each other.
+
+        Phones poll every few seconds; several pollers (app, widget, notification) then cost
+        one set of luna calls instead of one each. Only one refresh runs at a time; callers
+        that arrive meanwhile wait for it. invalidate_status() after anything that changes
+        the TV's state, so the next poll shows the change.
+        """
+        hit = _status_cache["data"]
+        if hit is not None and time.monotonic() - _status_cache["at"] < max_age:
+            return hit
+        with _status_lock:
+            hit = _status_cache["data"]
+            if hit is not None and time.monotonic() - _status_cache["at"] < max_age:
+                return hit
+            gen = _status_cache["gen"]
+            data = LGTV.get_status()
+            if _status_cache["gen"] == gen:
+                _status_cache["data"], _status_cache["at"] = data, time.monotonic()
+            return data
+
+    @staticmethod
+    def foreground_app(max_age: float = 3.0) -> str:
+        """App in front; from the status cache if it is younger than max_age (the phone polls
+        status every 3 s), so a long OK costs no extra luna call within its 1.5 s deadline."""
+        hit = _status_cache["data"]
+        if hit is not None and time.monotonic() - _status_cache["at"] < max_age:
+            return str(hit.get("current_app") or "")
+        fg = luna_call("luna://com.webos.applicationManager/getForegroundAppInfo", {})
+        return str(fg.get("appId") or "")
+
+    @staticmethod
+    def invalidate_status() -> None:
+        _status_cache["gen"] += 1
+        _status_cache["data"] = None
+
+    @staticmethod
     def send_remote_key(key: str, fast: bool = True) -> Dict[str, Any]:
         """Sends remote control key (UP, DOWN, LEFT, RIGHT, OK, BACK, HOME, etc.)."""
         normalized = KEY_MAP.get(key.lower().strip(), key.upper().strip())
         if normalized in ("LONG_ENTER", "OK_LONG"):
             # A held OK cannot be sent over the network input (it only knows press+release).
             # The hub opens its options menu on INFO instead; any other app gets a plain OK.
-            fg = luna_call("luna://com.webos.applicationManager/getForegroundAppInfo", {})
-            normalized = "INFO" if fg.get("appId") == "com.custom.launcher" else "ENTER"
+            normalized = "INFO" if LGTV.foreground_app() == "com.custom.launcher" else "ENTER"
         ok = send_key(normalized, fast=fast)
         return {"action": "send_key", "key": normalized, "success": ok}
 
@@ -304,21 +402,11 @@ class LGTV:
     @staticmethod
     def get_audio_status() -> Dict[str, Any]:
         """Returns sound output and volume details."""
-        sound_out = luna_call("luna://com.webos.service.audio/getSoundOutput", {})
-        vol_info = luna_call("luna://com.webos.service.audio/getVolume", {})
-
-        output_val = sound_out.get("soundOutput", "external_optical")
-        is_denon = "optical" in output_val.lower()
-        is_tv = "speaker" in output_val.lower() and not is_denon
-
-        return {
-            "soundOutput": output_val,
-            "volume": vol_info.get("volume", 0),
-            "muted": vol_info.get("muted", False),
-            "is_denon_optical": is_denon,
-            "is_tv_speaker": is_tv,
-            "display_title": "Denon AVR-1803 (Optisch)" if is_denon else ("TV-Lautsprecher" if is_tv else output_val)
-        }
+        sound_out, vol_info = _luna_many([
+            ("luna://com.webos.service.audio/getSoundOutput", {}),
+            ("luna://com.webos.service.audio/getVolume", {}),
+        ])
+        return _audio_status(sound_out, vol_info)
 
     @staticmethod
     def set_sound_output(output: str) -> Dict[str, Any]:
@@ -365,7 +453,8 @@ class LGTV:
     def send_enter() -> Dict[str, Any]:
         """Sends enter key to active input or app."""
         luna_call("luna://com.webos.service.ime/sendEnterKey", {})
-        return send_key("ENTER", fast=True)
+        ok = send_key("ENTER", fast=True)
+        return {"action": "send_enter", "success": ok}
 
     @staticmethod
     def screensaver() -> Dict[str, Any]:
@@ -401,7 +490,12 @@ class LGTV:
 
     @staticmethod
     def get_network_info() -> Dict[str, Any]:
-        """Retrieves network interfaces and MAC addresses for Wake-on-LAN."""
+        """Retrieves network interfaces and MAC addresses for Wake-on-LAN.
+
+        MACs don't change while the backend runs: once found, they are remembered."""
+        if _net_cache.get("macs"):
+            macs = dict(_net_cache["macs"])
+            return {"mac_addresses": macs, "primary_mac": macs.get("eth0") or macs.get("wlan0") or ""}
         macs = {}
         # Try local sysfs interfaces
         for iface_path in glob.glob("/sys/class/net/*"):
@@ -420,12 +514,15 @@ class LGTV:
         # If empty (e.g. running remote or restricted), query connectionmanager via Luna
         if not macs:
             res = luna_call("luna://com.webos.service.connectionmanager/getStatusInfo", {})
-            wired = res.get("wired", {})
-            wifi = res.get("wifi", {})
+            wired = res.get("wired") if isinstance(res.get("wired"), dict) else {}
+            wifi = res.get("wifi") if isinstance(res.get("wifi"), dict) else {}
             if wired.get("macAddress"):
                 macs["eth0"] = wired.get("macAddress")
             if wifi.get("macAddress"):
                 macs["wlan0"] = wifi.get("macAddress")
+        macs = {k: v for k, v in macs.items() if isinstance(v, str)}
+        if macs:
+            _net_cache["macs"] = dict(macs)
 
         return {
             "mac_addresses": macs,
@@ -434,16 +531,15 @@ class LGTV:
 
     @staticmethod
     def get_launcher_apps() -> List[Dict[str, Any]]:
-        """Returns sorted apps and inputs matching Modern LG Hub."""
+        """Returns the apps and inputs the launcher shows: PC (HDMI 1) first, then by usage.
+
+        The list is launcherd.py's data/apps.json; usage comes from its usage statistics
+        (decayed launch counts, same half-life as the launcher uses).
+        """
         apps_data = []
 
         # Check paths for Modern LG Hub data
-        candidate_paths = [
-            "/media/developer/apps/usr/palm/applications/com.custom.launcher/data/apps.json",
-            os.path.join(os.path.dirname(__file__), "..", "custom-launcher", "com.custom.launcher", "data", "apps.json")
-        ]
-        
-        for cp in candidate_paths:
+        for cp in _apps_json_paths():
             if os.path.exists(cp):
                 try:
                     with open(cp, "r", encoding="utf-8") as f:
@@ -456,12 +552,15 @@ class LGTV:
                             break
                 except Exception:
                     pass
+        apps_data = [a for a in apps_data if isinstance(a, dict)] if isinstance(apps_data, list) else []
 
         # Fallback to luna listApps if custom-launcher data not present
         if not apps_data:
             res = luna_call("luna://com.webos.applicationManager/listApps", {})
             raw_apps = res.get("apps", [])
-            for a in raw_apps:
+            for a in raw_apps if isinstance(raw_apps, list) else []:
+                if not isinstance(a, dict):
+                    continue
                 app_id = a.get("id")
                 if not a.get("visible", True) or not app_id:
                     continue
@@ -471,26 +570,12 @@ class LGTV:
                     "icon": a.get("largeIcon") or a.get("icon", "")
                 })
 
-        # Add top inputs (HDMI 1 is PC)
-        inputs = [
-            {"id": "com.webos.app.hdmi1", "title": "PC (HDMI 1)", "type": "input", "alias": "pc"},
-            {"id": "com.webos.app.hdmi2", "title": "HDMI 2", "type": "input", "alias": "hdmi2"},
-            {"id": "com.custom.launcher", "title": "Modern LG Hub", "type": "home", "alias": "home"}
-        ]
+        # PC (HDMI 1) always comes first; the launcher itself is not listed
+        pc = {"id": "com.webos.app.hdmi1", "title": "PC (HDMI 1)", "type": "input", "alias": "pc"}
 
-        # Merge usage count if available
-        usage_file = "/var/lib/webosbrew/custom-launcher-usage.json"
-        usage_map = {}
-        if os.path.exists(usage_file):
-            try:
-                with open(usage_file, "r") as f:
-                    usage_map = json.load(f)
-            except Exception:
-                pass
+        usage_map = load_usage()
 
-        merged = []
-        # Prepend PC input
-        merged.append(inputs[0])
+        merged = [pc]
 
         for a in apps_data:
             aid = a.get("id", "")
@@ -500,30 +585,71 @@ class LGTV:
             item["usage"] = usage_map.get(aid, 0.0)
             merged.append(item)
 
-        # Sort remaining apps by usage descending
-        def sort_key(it):
-            return it.get("usage", 0.0)
-
+        # Sort remaining apps by usage descending (stable: ties keep the apps.json order)
         main_list = merged[1:]
-        main_list.sort(key=sort_key, reverse=True)
+        main_list.sort(key=lambda it: it.get("usage", 0.0), reverse=True)
 
         return [merged[0]] + main_list
 
     @staticmethod
     def get_icon_file(app_id: str) -> Optional[str]:
-        """Finds icon path for app on disk."""
-        search_dirs = [
-            "/media/developer/apps/usr/palm/applications/com.custom.launcher/data/icons",
-            os.path.join(os.path.dirname(__file__), "..", "custom-launcher", "com.custom.launcher", "data", "icons"),
-            os.path.join(os.path.dirname(__file__), "..", "custom-launcher", "design", "fixtures", "assets", app_id)
-        ]
-        
-        for d in search_dirs:
-            p = os.path.join(d, f"{app_id}.png")
-            if os.path.exists(p):
-                return p
-            p_icon = os.path.join(d, "icon.png")
-            if os.path.exists(p_icon):
-                return p_icon
-            
+        """Finds the icon launcherd.py copied for app_id (any image type), or None.
+
+        app_id must already be validated (no path separators)."""
+        if not app_id or "/" in app_id or "\\" in app_id or app_id.startswith("."):
+            return None
+        for d in _icon_dirs():
+            for ext in ICON_TYPES:
+                p = os.path.join(d, app_id + ext)
+                if os.path.isfile(p):
+                    return p
+        # PC preview: the design fixtures keep one folder per app
+        p = os.path.join(_DEV_APP_DIR, "..", "design", "fixtures", "assets", app_id, "icon.png")
+        if os.path.isfile(p):
+            return p
         return None
+
+
+def _apps_json_paths() -> List[str]:
+    return [os.path.join(APP_DIR, "data", "apps.json"), os.path.join(_DEV_APP_DIR, "data", "apps.json")]
+
+
+def _icon_dirs() -> List[str]:
+    return [os.path.join(APP_DIR, "data", "icons"), os.path.join(_DEV_APP_DIR, "data", "icons")]
+
+
+def apps_version() -> int:
+    """mtime (s) of the app list the launcher uses; changes whenever launcherd rewrites it. 0 = none."""
+    for p in _apps_json_paths():
+        try:
+            return int(os.stat(p).st_mtime)
+        except OSError:
+            continue
+    return 0
+
+
+def load_usage(now: Optional[float] = None) -> Dict[str, float]:
+    """{app id: decayed launch count} from launcherd's statistics.
+
+    launcherd writes {"updatedAt": ms, "usage": {id: {"n": count, "t": last use (s)}}};
+    a flat {id: number} map (older format) is accepted too.
+    """
+    try:
+        with open(USAGE_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    table = raw.get("usage") if isinstance(raw.get("usage"), dict) else raw
+    now = time.time() if now is None else now
+    out: Dict[str, float] = {}
+    for app, v in table.items():
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, (int, float)):
+            out[app] = float(v)
+        elif isinstance(v, dict) and isinstance(v.get("n"), (int, float)) and isinstance(v.get("t"), (int, float)):
+            age = max(0.0, now - float(v["t"]))
+            out[app] = round(float(v["n"]) * 0.5 ** (age / USAGE_HALF_LIFE), 4)
+    return out

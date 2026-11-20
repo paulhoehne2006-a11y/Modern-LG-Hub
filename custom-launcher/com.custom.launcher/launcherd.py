@@ -49,6 +49,8 @@ LOCK_FILE = '/tmp/custom-launcher.lock'
 LOG_FILE = '/tmp/custom-launcher.log'          # tmpfs: no flash wear, cleared on reboot
 LOG_MAX = 256 * 1024
 REFRESH_LOCK = '/tmp/custom-launcher.refresh.lock'
+REFRESH_RETRY = 60           # s; a failed app-list refresh is retried after 60, 120, 180 s
+REFRESH_RETRIES = 3
 REPRESS_AFTER = 1.5          # a 'launch' of LG home this long after the pass = HOME pressed again
 ALLOW_MAX = 600              # LG home opened on purpose is given back to the launcher after this long
 WATCHDOG_SECONDS = 30        # safety net: poll the foreground app (also detects a restarted app manager)
@@ -70,6 +72,7 @@ ICON_KEYS = ('extraLargeIcon', 'largeIcon', 'mediumLargeIcon', 'icon')   # best 
 # after the launch (measured), so retries before that only add load.
 BURST = (0.0, 0.25, 0.45)
 MEMMGR_KEEPALIVE = 'com.webos.memorymanager.KeepAlive'   # memchute's own list (see ensure_memchute_keep_alive)
+MEMCHUTE_RESTART_TIMEOUT = 30       # s; systemctl normally returns in ~1 s
 # Home key straight to the launcher (see set_home_key): the compositor's key filters come from
 # configd, and their Home handler is patched in a copy generated from the TV's own file.
 KEYFILTER_CFG = 'com.webos.surfacemanager.keyFilters'
@@ -342,6 +345,17 @@ def write_data(apps):
 
 
 _shrink_seen = False
+
+
+def load_known():
+    """KNOWN from the last data/apps.json, so usage is counted even if the first refresh fails."""
+    try:
+        with open(os.path.join(DATA_DIR, 'apps.json')) as fh:
+            ids = [a.get('id') for a in json.load(fh).get('apps') or [] if isinstance(a, dict)]
+    except (OSError, ValueError, TypeError, AttributeError):
+        return
+    if not KNOWN:
+        KNOWN.update(i for i in ids if isinstance(i, str) and i)
 
 
 def _stored_count():
@@ -656,6 +670,11 @@ def ensure_keep_alive():
 _keyfilter_warned = False
 
 
+def _read_text(path):
+    with open(path, encoding='utf-8') as fh:
+        return fh.read()
+
+
 def set_home_key(st, direct):
     """Let the Home key open the launcher itself (direct=True) or LG home again (False).
 
@@ -677,7 +696,7 @@ def set_home_key(st, direct):
         uses_orig = any(isinstance(f, dict) and f.get('file') in KEYFILTER_ORIG for f in cfg)
         uses_copy = any(isinstance(f, dict) and f.get('file') == KEYFILTER_COPY for f in cfg)
         if direct:
-            src = open(orig, encoding='utf-8').read() if orig else ''
+            src = _read_text(orig) if orig else ''
             if src.count(KEYFILTER_OLD) != 1:
                 if not _keyfilter_warned:
                     _keyfilter_warned = True
@@ -686,7 +705,7 @@ def set_home_key(st, direct):
             else:
                 patched = src.replace(KEYFILTER_OLD, KEYFILTER_NEW)
                 try:
-                    current = open(KEYFILTER_COPY, encoding='utf-8').read()
+                    current = _read_text(KEYFILTER_COPY)
                 except OSError:
                     current = None
                 if current != patched:
@@ -734,9 +753,31 @@ def ensure_memchute_keep_alive():
     if not isinstance(live, list) or APP_ID in live or _memchute_restarted:
         return
     _memchute_restarted = True
-    rc = subprocess.call(['systemctl', 'restart', 'memchute'],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        # bounded: a systemctl stuck on a job would otherwise freeze the whole daemon (no redirect)
+        rc = subprocess.call(['systemctl', 'restart', 'memchute'], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=MEMCHUTE_RESTART_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        rc = 'timeout'
+    except OSError as e:
+        rc = e
     log('memchute restarted to load its keep-alive list (rc=%s)' % rc)
+
+
+def guard_tick(st):
+    """Soon after start, then every GUARD_SECONDS: re-assert the settings configd may have lost.
+
+    While paused it instead makes sure the Home key belongs to LG again. That matters after a
+    daemon that had patched the key filter was killed (OOM, kill -9): the patch lives on in
+    configd, and the new daemon starts with home_key_direct=False, so the "undo on pause" check
+    in the main loop would never fire and the .off switch would not give Home back to LG.
+    """
+    if not paused():
+        guard_default_home()
+        ensure_keep_alive()
+        set_home_key(st, True)
+    else:
+        set_home_key(st, False)
 
 
 def trim_background(st):
@@ -825,6 +866,7 @@ def daemon(boot):
     st.started = time.time()
     st.quiet = BOOT_QUIET if boot else 0.0
     st.usage = usage_load()
+    load_known()
 
     # SIGTERM must wake the select() at once (Python restarts interrupted calls otherwise)
     wake_r, wake_w = os.pipe()
@@ -854,10 +896,14 @@ def daemon(boot):
     refresh_at = mono + 60 if boot else 0.0          # store apps can be mounted late at boot
     if first == 'retry':
         refresh_at = mono + 10 if not refresh_at else min(refresh_at, mono + 10)
+    elif first is False and not refresh_at:
+        refresh_at = mono + REFRESH_RETRY             # listApps failed (busy TV): try again later
+    refresh_fails = 0 if first is not False else 1
     watch_at = mono + 1.0
     guard_at = mono + 2.0                             # defaultApps + keepAlive: soon after start, then every 5 min
     trim_at = mono + (BOOT_QUIET if boot else 20.0)   # never trim while the TV is still booting
     first_applist = True
+    last_err, last_err_at = None, 0.0
 
     while not st.stop:
         try:
@@ -896,17 +942,21 @@ def daemon(boot):
                 usage_flush(st.usage)
             if refresh_at and now >= refresh_at:
                 refresh_at = 0.0
-                if refresh(timeout=15, wait=False) == 'retry':
+                res = refresh(timeout=15, wait=False)
+                if res == 'retry':
                     refresh_at = time.monotonic() + 10
+                elif res is False:
+                    refresh_fails += 1
+                    if refresh_fails <= REFRESH_RETRIES:     # bounded: a broken SAM can't keep us busy
+                        refresh_at = time.monotonic() + REFRESH_RETRY * refresh_fails
+                else:
+                    refresh_fails = 0
             if now >= watch_at:
                 watch_at = now + WATCHDOG_SECONDS
                 watchdog(st, subs)
             if now >= guard_at:
                 guard_at = now + GUARD_SECONDS
-                if not paused():
-                    guard_default_home()
-                    ensure_keep_alive()
-                    set_home_key(st, True)
+                guard_tick(st)
             if st.home_key_direct and paused():           # off switch / uninstall: give Home back to LG at once
                 set_home_key(st, False)
             if now >= trim_at:
@@ -971,7 +1021,11 @@ def daemon(boot):
                     else:                                    # an app was installed/removed/updated: refresh soon
                         refresh_at = time.monotonic() + 3
         except Exception:
-            log('loop error: ' + traceback.format_exc().replace('\n', ' | ')[-700:])
+            err = traceback.format_exc().replace('\n', ' | ')[-700:]
+            mono_now = time.monotonic()
+            if err != last_err or mono_now - last_err_at > 60:   # same error at most once a minute
+                log('loop error: ' + err)
+                last_err, last_err_at = err, mono_now
             time.sleep(1)
 
     for sub in subs:
@@ -982,6 +1036,7 @@ def daemon(boot):
     if st.usage_dirty_at:
         usage_flush(st.usage)
     log('daemon stop')
+    lock.close()
     return 0
 
 

@@ -4,9 +4,15 @@
 #   Pause   touch /var/lib/webosbrew/custom-launcher.off   LG's home behaves as stock again (immediately)
 #   Resume  rm /var/lib/webosbrew/custom-launcher.off
 #   Remove  delete this file, then uninstall "Home" in Homebrew Channel
+#
+# Running it again (by hand) is safe: the helper starts only once (lock file) and the
+# previous supervisor loop is replaced.
+PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+export PATH
 APP=/media/developer/apps/usr/palm/applications/com.custom.launcher
 LOG=/tmp/custom-launcher.log
 DEPLOYING=/tmp/custom-launcher.deploying
+SUPPID=/tmp/custom-launcher-supervisor.pid
 [ -f "$APP/launcherd.py" ] || exit 0
 PY=$(command -v python3 2>/dev/null)
 if [ -z "$PY" ]; then
@@ -15,6 +21,17 @@ if [ -z "$PY" ]; then
 fi
 # "start" detaches at once (own session, no inherited descriptors): boot hooks never wait on it.
 "$PY" "$APP/launcherd.py" start --boot </dev/null >/dev/null 2>&1
+
+# Replace a supervisor from an earlier run of this hook (only if that PID really is one).
+if [ -f "$SUPPID" ]; then
+  old=$(cat "$SUPPID" 2>/dev/null)
+  case "$old" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$old" != "$$" ] && tr '\0' ' ' < "/proc/$old/cmdline" 2>/dev/null | grep -q 'custom-launcher'; then
+         kill "$old" 2>/dev/null
+       fi ;;
+  esac
+fi
 
 # Supervisor: if the helper dies (crash, OOM kill), start it again within a minute.
 # "start" is a no-op while it runs (lock file). Skipped while tools/deploy.sh is installing.
@@ -29,4 +46,5 @@ fi
     fi
   done
 ) </dev/null >/dev/null 2>&1 &
+echo $! > "$SUPPID"
 exit 0

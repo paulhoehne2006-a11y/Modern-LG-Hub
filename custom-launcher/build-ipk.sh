@@ -4,14 +4,20 @@
 set -e
 cd "$(dirname "$0")"
 APP=com.custom.launcher
+command -v node >/dev/null 2>&1 || { echo "build-ipk.sh: node is required" >&2; exit 1; }
 VER=$(node -p "require('./$APP/appinfo.json').version")
+case "$VER" in
+  ''|*[!0-9A-Za-z.+~-]*) echo "build-ipk.sh: bad version '$VER' in appinfo.json" >&2; exit 1 ;;
+esac
 OUT="${APP}_${VER}_all.ipk"
 B=$(mktemp -d)
+trap 'rm -rf "$B"' EXIT          # no temp dirs left behind when a step fails
 
 mkdir -p "$B/data/usr/palm/applications/$APP" "$B/control"
 cp -r "$APP"/. "$B/data/usr/palm/applications/$APP/"
 # generated on the TV by launcherd.py / v1 leftovers: never ship them
 rm -rf "$B/data/usr/palm/applications/$APP/data" "$B/data/usr/palm/applications/$APP/apps.json" "$B/data/usr/palm/applications/$APP/refresh-apps.py" "$B/data/usr/palm/applications/$APP/home-watch.py" "$B/data/usr/palm/applications/$APP/__pycache__"
+find "$B/data" \( -name '*.pyc' -o -name '*.tmp' \) -exec rm -f {} +
 cat > "$B/control/control" <<EOF
 Package: $APP
 Version: $VER
@@ -42,5 +48,4 @@ for(const f of files){
 fs.writeFileSync(out,Buffer.concat(parts));
 ' "$OUT" "$B/debian-binary" "$B/control.tar.gz" "$B/data.tar.gz"
 
-rm -rf "$B"
 echo "$OUT"

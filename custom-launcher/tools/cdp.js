@@ -11,20 +11,25 @@
 //
 // Options (before the command):
 //   --app <appId>       page to target (default com.custom.launcher)
-//   --host <host:port>  inspector address (default 192.168.178.60:9998; use 127.0.0.1:<port> for local Edge)
+//   --host <host:port>  inspector address (default <TV_HOST without user@>:9998, TV_HOST as in the other
+//                       tools, else 192.168.178.60; use 127.0.0.1:<port> for local Edge)
 //   --timeout <ms>      overall timeout (default 30000)
 //   --console           also print console.* output produced while the command runs
 'use strict';
 const fs = require('fs');
 
 const argv = process.argv.slice(2);
-const opt = { app: 'com.custom.launcher', host: '192.168.178.60:9998', timeout: 30000, console: false };
+const tvHost = (process.env.TV_HOST || 'root@192.168.178.60').replace(/^.*@/, '');
+const opt = { app: 'com.custom.launcher', host: tvHost + ':9998', timeout: 30000, console: false };
 while (argv[0] && argv[0].startsWith('--')) {
   const o = argv.shift();
   if (o === '--console') opt.console = true;
   else if (o === '--app') opt.app = argv.shift();
   else if (o === '--host') opt.host = argv.shift();
-  else if (o === '--timeout') opt.timeout = Number(argv.shift());
+  else if (o === '--timeout') {
+    opt.timeout = Number(argv.shift());
+    if (!Number.isFinite(opt.timeout) || opt.timeout <= 0) { console.error('--timeout needs a positive number of ms'); process.exit(2); }
+  }
   else { console.error('unknown option ' + o); process.exit(2); }
 }
 const cmd = argv.shift();

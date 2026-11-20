@@ -1,0 +1,61 @@
+# Checks for the Modern LG Hub backend, root daemon, launcher JS and scripts.
+# Everything runs without a TV: luna, the LAN devices and Gemini are stubbed in the tests.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: compileall
+        run: python -m compileall -q gemini-tv-controller custom-launcher/com.custom.launcher/launcherd.py tests
+      - name: unittest (stdlib only)
+        run: python -m unittest discover -s tests -p 'test_hub_*.py' -v
+      - name: pytest
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest -q tests/test_hub_*.py
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: node --check
+        run: |
+          for f in custom-launcher/com.custom.launcher/app.js custom-launcher/tools/*.js; do
+            node --check "$f"
+          done
+      - name: sh -n / bash -n
+        run: |
+          for f in custom-launcher/boot/99-custom-launcher custom-launcher/build-ipk.sh \
+                   gemini-tv-controller/90-gemini-controller.sh gemini-tv-controller/set-tapo.sh; do
+            sh -n "$f"
+          done
+          for f in custom-launcher/tools/*.sh; do bash -n "$f"; done
+      - name: shellcheck (if available)
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -S warning custom-launcher/boot/99-custom-launcher custom-launcher/build-ipk.sh \
+              custom-launcher/tools/*.sh gemini-tv-controller/*.sh
+          else
+            echo "shellcheck not installed, skipped"
+          fi
+      - name: build the ipk
+        run: sh custom-launcher/build-ipk.sh

@@ -7,6 +7,8 @@
 #   Pause   touch /var/lib/webosbrew/gemini-controller.off   (watchdog stops restarting)
 #   Resume  rm /var/lib/webosbrew/gemini-controller.off
 #   Status  cat /tmp/gemini-supervisor.log
+PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+export PATH
 DIR=/var/lib/webosbrew/gemini-controller
 OFF=/var/lib/webosbrew/gemini-controller.off
 LOG=/tmp/gemini-server.log
@@ -27,7 +29,7 @@ fi
 
 server_pids() {
     for p in /proc/[0-9]*; do
-        c=$(tr "\0" " " < $p/cmdline 2>/dev/null)
+        c=$(tr "\0" " " < "$p/cmdline" 2>/dev/null)
         case "$c" in *"$DIR/server.py"*) echo "${p#/proc/}";; esac
     done
 }
@@ -47,10 +49,15 @@ healthy() {
     wget -q -T 5 -O /dev/null "http://127.0.0.1:$PORT/api" 2>/dev/null
 }
 
-# replace an older watchdog (from boot or a previous deploy)
+# replace an older watchdog (from boot or a previous deploy), but only if that PID still is one
 if [ -f "$SUPPID" ]; then
     old=$(cat "$SUPPID" 2>/dev/null)
-    [ -n "$old" ] && [ "$old" != "$$" ] && kill "$old" 2>/dev/null
+    case "$old" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$old" != "$$" ] && tr '\0' ' ' < "/proc/$old/cmdline" 2>/dev/null | grep -q 'gemini-controller'; then
+               kill "$old" 2>/dev/null
+           fi ;;
+    esac
 fi
 
 start_server

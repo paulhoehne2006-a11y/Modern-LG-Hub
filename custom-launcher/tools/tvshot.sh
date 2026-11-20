@@ -7,6 +7,6 @@ out="$1"
 remote="/tmp/tvshot-$$-$RANDOM.png"
 "$(dirname "$0")/luna.sh" luna://com.webos.surfacemanager/captureCompositorOutput \
   "{\"output\":\"$remote\",\"format\":\"PNG\"}" >/dev/null || { echo "capture failed" >&2; exit 1; }
-scp -q -o BatchMode=yes "$TV:$remote" "$out"; rc=$?
-ssh -o BatchMode=yes -o LogLevel=ERROR "$TV" "rm -f $remote"
+scp -q -o BatchMode=yes -o ConnectTimeout=8 "$TV:$remote" "$out"; rc=$?
+ssh -o BatchMode=yes -o ConnectTimeout=8 -o LogLevel=ERROR "$TV" "rm -f '$remote'"
 exit $rc

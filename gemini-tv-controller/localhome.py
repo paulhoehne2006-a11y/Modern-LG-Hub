@@ -32,11 +32,19 @@ ENV_FILE = os.path.join(HERE, ".env")
 
 WIZ_PORT = 38899
 DASHBOARD_TTL = 5.0         # s; the launcher polls the dashboard regularly
-REDISCOVER_EVERY = 60.0     # s; at most one LAN rediscovery per minute
+REDISCOVER_EVERY = 60.0     # s; at most one LAN rediscovery per minute ...
+REDISCOVER_MAX = 600.0      # s; ... backing off to one per 10 min while it finds nothing new
+DASHBOARD_WAIT = 20.0       # s; longest a request waits for another thread's dashboard refresh
 
 _MAC_RE = re.compile(r"^[0-9a-f]{12}$")
-_lock = threading.Lock()
-_cache: Dict[str, Any] = {"dash": None, "dash_at": 0.0, "discovered_at": 0.0, "caps": {}}
+_IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+_lock = threading.Lock()                 # ip-cache file, KLAP session table, file caches
+_discover_lock = threading.Lock()        # one LAN rediscovery at a time
+_refresh_lock = threading.Lock()         # one dashboard refresh at a time
+# dash/dash_at: last dashboard; gen: bumped by every switch so an older, slower refresh can't
+# overwrite the cache with the state from before the switch.
+_cache: Dict[str, Any] = {"dash": None, "dash_at": 0.0, "gen": 0, "discovered_at": 0.0,
+                          "discover_every": REDISCOVER_EVERY, "caps": {}}
 _HEX_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
 KELVIN_MIN, KELVIN_MAX = 2200, 6500     # white range every WiZ white/colour bulb accepts
 
@@ -53,18 +61,102 @@ def _log(msg: str) -> None:
     print(f"[localhome] {msg}", file=sys.stderr, flush=True)
 
 
+# ---- small files, re-read only when they change -------------------------------
+
+_file_cache: Dict[str, Any] = {}
+
+
+def _read_cached(path: str, parse):
+    """parse(open file) for path, cached until the file's mtime/size changes. Raises like open()."""
+    st = os.stat(path)
+    sig = (st.st_mtime_ns, st.st_size)
+    hit = _file_cache.get(path)
+    if hit and hit[0] == sig:
+        return hit[1]
+    with open(path, "r", encoding="utf-8") as f:
+        value = parse(f)
+    with _lock:
+        _file_cache[path] = (sig, value)
+    return value
+
+
+def _parse_env(f) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for line in f:
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        if k and k not in out:             # first definition wins (as before)
+            out[k] = v.strip().strip('"').strip("'")
+    return out
+
+
+def env_value(key: str) -> str:
+    """Setting from the process environment, else from .env next to the backend ("" if unset).
+
+    The .env is parsed only when it changed, so this is cheap enough for every request.
+    """
+    val = os.environ.get(key, "")
+    if val:
+        return val
+    try:
+        return _read_cached(ENV_FILE, _parse_env).get(key, "")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def set_env_value(key: str, value: str) -> None:
+    """Replace/add KEY=value in .env, keeping every other line. Atomic, mode 0600 (it holds secrets).
+
+    Raises OSError/UnicodeDecodeError if the existing file can't be read: then nothing is written,
+    because rewriting it from an empty list would drop the Tapo login and everything else.
+    """
+    if not re.match(r"^[A-Z][A-Z0-9_]*$", key) or any(c in value for c in "\r\n\0"):
+        raise ValueError("invalid .env entry")
+    with _lock:
+        lines: List[str] = []
+        if os.path.exists(ENV_FILE):
+            with open(ENV_FILE, "r", encoding="utf-8") as f:
+                lines = [l for l in f.read().splitlines() if not l.strip().startswith(key + "=")]
+        lines.append(f"{key}={value}")
+        tmp = f"{ENV_FILE}.{os.getpid()}.tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, ENV_FILE)
+            _file_cache.pop(ENV_FILE, None)
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+
+
 # ---- device list & IP cache -------------------------------------------------
+
+def _parse_devices(f):
+    raw = json.load(f).get("devices", [])
+    return raw if isinstance(raw, list) else []
+
 
 def load_devices() -> List[Dict[str, Any]]:
     try:
-        with open(DEVICES_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f).get("devices", [])
+        raw = _read_cached(DEVICES_FILE, _parse_devices)
     except Exception as e:
         _log(f"devices.json unreadable: {e}")
         return []
     ips = _load_ip_cache()
     out = []
     for d in raw:
+        if not isinstance(d, dict):
+            continue
         mac = norm_mac(d.get("mac"))
         if not valid_id(mac) or d.get("kind") not in ("wiz", "tapo"):
             continue
@@ -73,31 +165,37 @@ def load_devices() -> List[Dict[str, Any]]:
             "kind": d["kind"],
             "room": str(d.get("room") or ""),
             "name": str(d.get("name") or mac),
-            "ip": ips.get(mac) or d.get("ip") or "",
+            "ip": ips.get(mac) or str(d.get("ip") or ""),
         })
     return out
 
 
+def _parse_ip_cache(f) -> Dict[str, str]:
+    data = json.load(f)
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, str) and _IPV4_RE.match(v)}
+
+
 def _load_ip_cache() -> Dict[str, str]:
     try:
-        with open(IP_CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return {k: v for k, v in data.items() if isinstance(v, str)}
+        return dict(_read_cached(IP_CACHE_FILE, _parse_ip_cache))
     except Exception:
         return {}
 
 
 def _remember_ip(mac: str, ip: str) -> None:
+    cache = _load_ip_cache()
+    if cache.get(mac) == ip:
+        return
+    cache[mac] = ip
     with _lock:
-        cache = _load_ip_cache()
-        if cache.get(mac) == ip:
-            return
-        cache[mac] = ip
-        tmp = IP_CACHE_FILE + ".tmp"
+        tmp = f"{IP_CACHE_FILE}.{os.getpid()}.tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(cache, f)
             os.replace(tmp, IP_CACHE_FILE)
+            _file_cache.pop(IP_CACHE_FILE, None)
         except Exception as e:
             _log(f"ip cache not written: {e}")
     _log(f"{mac} is now at {ip}")
@@ -109,24 +207,25 @@ def _device(dev_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _subnet_prefix() -> str:
+    """'a.b.c.' of the TV's own LAN address (the route towards HUB_GATEWAY, default the Fritzbox)."""
+    gw = env_value("HUB_GATEWAY") or "192.168.178.1"
+    s = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("192.168.178.1", 9))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip.rsplit(".", 1)[0] + "."
+        s.connect((gw, 9))                 # UDP connect sends nothing, it only picks the route
+        return s.getsockname()[0].rsplit(".", 1)[0] + "."
     except Exception:
-        return "192.168.178."
+        return gw.rsplit(".", 1)[0] + "." if _IPV4_RE.match(gw) else "192.168.178."
+    finally:
+        if s is not None:
+            s.close()
 
 
-def rediscover(force: bool = False) -> Dict[str, str]:
-    """Find the current IPs of all devices (WiZ broadcast + ARP table). Rate-limited."""
-    now = time.time()
-    if not force and now - _cache["discovered_at"] < REDISCOVER_EVERY:
-        return {}
-    _cache["discovered_at"] = now
+def _scan_lan() -> Dict[str, str]:
+    """{mac: ip} seen on the LAN right now: WiZ broadcast replies, then the kernel ARP table. ~3.5 s."""
     found: Dict[str, str] = {}
     # WiZ answers a broadcast with its MAC.
+    s = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -148,10 +247,13 @@ def rediscover(force: bool = False) -> Dict[str, str]:
                 continue
             if valid_id(mac):
                 found[mac] = addr[0]
-        s.close()
     except Exception as e:
         _log(f"wiz discovery failed: {e}")
+    finally:
+        if s is not None:
+            s.close()
     # Everything else (Tapo): touch every address so the kernel ARP table fills up.
+    s = None
     try:
         prefix = _subnet_prefix()
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -161,6 +263,7 @@ def rediscover(force: bool = False) -> Dict[str, str]:
             except OSError:
                 pass
         s.close()
+        s = None
         time.sleep(1.5)
         with open("/proc/net/arp", "r") as f:
             for line in f.readlines()[1:]:
@@ -171,11 +274,38 @@ def rediscover(force: bool = False) -> Dict[str, str]:
                         found.setdefault(mac, parts[0])
     except Exception as e:
         _log(f"arp discovery failed: {e}")
-    known = {d["mac"]: d["ip"] for d in load_devices()}
-    for mac, ip in found.items():
-        if mac in known and known[mac] != ip:
-            _remember_ip(mac, ip)
+    finally:
+        if s is not None:
+            s.close()
     return found
+
+
+def rediscover(force: bool = False, min_interval: Optional[float] = None) -> Dict[str, str]:
+    """Find the current IPs of all devices (WiZ broadcast + ARP table) and update ip-cache.json.
+
+    Rate-limited: returns {} without scanning if the last scan is too recent. The interval
+    starts at REDISCOVER_EVERY and doubles (up to REDISCOVER_MAX) while scans find no new IP,
+    so a lamp that is simply switched off at the wall doesn't cause a subnet sweep every minute.
+    min_interval overrides that back-off (used when the owner actively switches a device).
+    Concurrent callers wait for a running scan instead of starting their own; afterwards the
+    new IPs are in the ip cache (see _with_rediscovery).
+    """
+    with _discover_lock:
+        now = time.time()
+        every = _cache["discover_every"] if min_interval is None else min_interval
+        if not force and now - _cache["discovered_at"] < every:
+            return {}
+        _cache["discovered_at"] = now
+        found = _scan_lan()
+        known = {d["mac"]: d["ip"] for d in load_devices()}
+        moved = False
+        for mac, ip in found.items():
+            if mac in known and known[mac] != ip:
+                _remember_ip(mac, ip)
+                moved = True
+        _cache["discover_every"] = (REDISCOVER_EVERY if moved
+                                    else min(_cache["discover_every"] * 2, REDISCOVER_MAX))
+        return found
 
 
 # ---- WiZ (UDP JSON) ------------------------------------------------------------
@@ -185,23 +315,32 @@ def _wiz_call(ip: str, method: str, params: Optional[dict] = None, tries: int = 
         raise OSError("no IP")
     msg = json.dumps({"id": 1, "method": method, "params": params or {}}).encode()
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(0.5)
     try:
         for _ in range(tries):
             s.sendto(msg, (ip, WIZ_PORT))
             deadline = time.time() + 0.5
-            while time.time() < deadline:
+            while True:
+                left = deadline - time.time()
+                if left <= 0:
+                    break
+                s.settimeout(left)
                 try:
                     data, addr = s.recvfrom(4096)
                 except socket.timeout:
                     break
                 if addr[0] != ip:
                     continue
-                res = json.loads(data)
+                try:
+                    res = json.loads(data)
+                except ValueError:
+                    continue                    # garbage datagram: keep waiting for the real answer
+                if not isinstance(res, dict):
+                    continue
                 if "error" in res:
                     raise OSError(f"WiZ error: {res['error']}")
                 if res.get("method") == method:
-                    return res.get("result", {})
+                    result = res.get("result")
+                    return result if isinstance(result, dict) else {}
     finally:
         s.close()
     raise OSError(f"no answer from {ip}")
@@ -335,23 +474,11 @@ def _sha256(b: bytes) -> bytes:
     return hashlib.sha256(b).digest()
 
 
-def _env_value(key: str) -> str:
-    val = os.environ.get(key, "")
-    if val:
-        return val
-    try:
-        with open(ENV_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith(key + "="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
-    except Exception:
-        pass
-    return ""
+_env_value = env_value        # old name
 
 
 def _tapo_credentials():
-    email, pw = _env_value("TAPO_EMAIL"), _env_value("TAPO_PASSWORD")
+    email, pw = env_value("TAPO_EMAIL"), env_value("TAPO_PASSWORD")
     creds = []
     if email and pw:
         creds.append((email, pw))
@@ -371,12 +498,19 @@ class _KlapSession:
         req.add_header("Content-Type", "application/octet-stream")
         if self.cookie:
             req.add_header("Cookie", self.cookie)
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read(), r.headers.get("Set-Cookie", "")
+        with _LAN_OPENER.open(req, timeout=timeout) as r:
+            return r.read(65536), r.headers.get("Set-Cookie", "")
 
     def handshake(self) -> None:
-        local = os.urandom(16)
         self.cookie = None
+        try:
+            self._handshake()
+        except BaseException:
+            self.cookie = None          # never keep a half-made session (cookie without key)
+            raise
+
+    def _handshake(self) -> None:
+        local = os.urandom(16)
         resp, cookie = self._post("handshake1", local)
         m = re.search(r"TP_SESSIONID=([0-9A-Fa-f]+)", cookie or "")
         if len(resp) != 48 or not m:
@@ -427,6 +561,8 @@ class _KlapSession:
                         raise
                     self.cookie = None      # session gone (timeout / plug rebooted): handshake again
                     continue
+                if not isinstance(res, dict):
+                    raise OSError("unexpected Tapo reply")
                 code = res.get("error_code", 0)
                 if code == 0:
                     return res.get("result", {})
@@ -436,6 +572,8 @@ class _KlapSession:
         raise OSError("Tapo request failed")
 
 
+# LAN devices are always reached directly, never through an http_proxy from the environment.
+_LAN_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 _klap: Dict[str, _KlapSession] = {}
 
 
@@ -464,17 +602,21 @@ def _tapo_set(d, on: Optional[bool] = None, brightness: Optional[int] = None,
 
 # ---- public API (same shapes the launcher already uses) ------------------------
 
-def _with_rediscovery(d, fn):
-    """Run fn(d); if the device doesn't answer, look for its new IP once and retry."""
+def _with_rediscovery(d, fn, eager: bool = False):
+    """Run fn(d); if the device doesn't answer, look for its new IP once and retry.
+
+    Retries whenever the ip cache now has another address for the device, also when the
+    rediscovery that found it ran in another thread (this call then only waited for it).
+    eager: the owner is switching this device right now, so ignore the scan back-off.
+    """
     try:
         return fn(d)
     except PermissionError:
         raise
     except Exception as first:
-        if not rediscover():
-            raise first
+        rediscover(min_interval=REDISCOVER_EVERY if eager else None)
         nd = _device(d["mac"])
-        if not nd or nd["ip"] == d["ip"]:
+        if not nd or not nd["ip"] or nd["ip"] == d["ip"]:
             raise first
         return fn(nd)
 
@@ -491,13 +633,7 @@ def display_name(d) -> str:
     return f"{d['room']} {d['name']}".strip()
 
 
-def get_dashboard_devices(max_age: Optional[float] = None) -> List[Dict[str, Any]]:
-    """All devices with their current state, in devices.json order (cached a few seconds)."""
-    if max_age is None:
-        max_age = DASHBOARD_TTL
-    now = time.time()
-    if _cache["dash"] is not None and now - _cache["dash_at"] < max_age:
-        return _cache["dash"]
+def _read_dashboard() -> List[Dict[str, Any]]:
     devices = load_devices()
 
     def one(d):
@@ -506,7 +642,9 @@ def get_dashboard_devices(max_age: Optional[float] = None) -> List[Dict[str, Any
         except Exception as e:
             return None, str(e)
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    if not devices:
+        return []
+    with ThreadPoolExecutor(max_workers=min(8, len(devices))) as pool:
         results = list(pool.map(one, devices))
     out = []
     for d, (st, err) in zip(devices, results):
@@ -524,12 +662,49 @@ def get_dashboard_devices(max_age: Optional[float] = None) -> List[Dict[str, Any
             "online": st is not None,
             **({"error": err} if err else {}),
         })
-    _cache["dash"], _cache["dash_at"] = out, now
     return out
 
 
+def get_dashboard_devices(max_age: Optional[float] = None) -> List[Dict[str, Any]]:
+    """All devices with their current state, in devices.json order (cached a few seconds).
+
+    Only one refresh runs at a time (an unreachable device makes one take seconds). While it
+    runs, other callers get the previous, slightly older list at once instead of piling up
+    behind it; only callers with no usable list at all (first call, right after a switch) wait.
+    """
+    if max_age is None:
+        max_age = DASHBOARD_TTL
+    dash, at = _cache["dash"], _cache["dash_at"]
+    if dash is not None and time.time() - at < max_age:
+        return dash
+    if dash is not None:
+        if not _refresh_lock.acquire(blocking=False):
+            return dash                                  # stale-while-revalidate
+    elif not _refresh_lock.acquire(timeout=DASHBOARD_WAIT):
+        return _cache["dash"] or []
+    try:
+        dash, at = _cache["dash"], _cache["dash_at"]     # filled by the refresh we waited for?
+        if dash is not None and time.time() - at < max_age:
+            return dash
+        gen = _cache["gen"]
+        out = _read_dashboard()
+        with _lock:
+            if _cache["gen"] == gen:                     # no switch happened meanwhile
+                _cache["dash"], _cache["dash_at"] = out, time.time()
+        return out
+    finally:
+        _refresh_lock.release()
+
+
+def dashboard_age() -> Optional[float]:
+    """Seconds since the cached dashboard was read, None if there is none."""
+    return None if _cache["dash"] is None else max(0.0, time.time() - _cache["dash_at"])
+
+
 def invalidate_cache() -> None:
-    _cache["dash"] = None
+    with _lock:
+        _cache["gen"] += 1
+        _cache["dash"] = None
 
 
 def set_switch(dev_id: str, state, brightness: Optional[int] = None,
@@ -542,9 +717,12 @@ def set_switch(dev_id: str, state, brightness: Optional[int] = None,
     setter = _wiz_set if d["kind"] == "wiz" else _tapo_set
     try:
         _with_rediscovery(d, lambda x: setter(x, on, brightness if on else None,
-                                              color if on else None, kelvin if on else None))
-    except Exception as e:
+                                              color if on else None, kelvin if on else None),
+                          eager=True)
+    except PermissionError as e:
         return {"status": "error", "error": str(e)}
+    except Exception as e:
+        return {"status": "error", "error": f"{display_name(d)} nicht erreichbar ({e})"}
     finally:
         invalidate_cache()
     return {"status": "ok", "state": "on" if on else "off", "new_state": "on" if on else "off"}
@@ -555,7 +733,7 @@ def toggle_switch(dev_id: str) -> Dict[str, Any]:
     if not d:
         return {"status": "error", "error": "Unbekanntes Gerät"}
     try:
-        cur = _status(d)["state"]
+        cur = _with_rediscovery(d, _wiz_status if d["kind"] == "wiz" else _tapo_status, eager=True)["state"]
     except Exception as e:
         return {"status": "error", "error": f"{display_name(d)} nicht erreichbar ({e})"}
     return set_switch(d["mac"], "off" if cur == "on" else "on")

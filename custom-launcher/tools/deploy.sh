@@ -8,6 +8,7 @@ TV="${TV_HOST:-root@192.168.178.60}"
 APP=/media/developer/apps/usr/palm/applications/com.custom.launcher
 HOOK=/var/lib/webosbrew/init.d/99-custom-launcher
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=8 -o LogLevel=ERROR"
+SCP="scp -q -o BatchMode=yes -o ConnectTimeout=8"
 
 # 0. local checks
 sh -n build-ipk.sh
@@ -15,9 +16,10 @@ sh -n boot/99-custom-launcher
 node --check com.custom.launcher/app.js
 IPK=$(sh build-ipk.sh)
 echo "built $IPK"
-scp -q -o BatchMode=yes "$IPK" "$TV:/tmp/custom-launcher.ipk"
-scp -q -o BatchMode=yes boot/99-custom-launcher "$TV:/tmp/99-custom-launcher.new"
-scp -q -o BatchMode=yes com.custom.launcher/launcherd.py "$TV:/tmp/launcherd.check.py"
+[ -n "$IPK" ] && [ -f "$IPK" ] || { echo "ABORT: build-ipk.sh produced no package"; exit 1; }
+$SCP "$IPK" "$TV:/tmp/custom-launcher.ipk"
+$SCP boot/99-custom-launcher "$TV:/tmp/99-custom-launcher.new"
+$SCP com.custom.launcher/launcherd.py "$TV:/tmp/launcherd.check.py"
 
 # 1. verify on the TV (python syntax, hook syntax) before anything is replaced
 $SSH "$TV" 'python3 -c "import ast; ast.parse(open(\"/tmp/launcherd.check.py\").read())" && sh -n /tmp/99-custom-launcher.new && rm -f /tmp/launcherd.check.py' \
@@ -42,22 +44,24 @@ if ! echo "$OUT" | grep -q INSTALLED; then
   exit 1
 fi
 
-# 4. data, boot hook (copied under a temp name, then moved: never half-written), helper
+# 4. data, boot hook (copied under a temp name, then moved: never half-written), helper.
+#    On any failure the helper is started again and the deploying flag removed, so the TV is
+#    never left without the Home redirect (the supervisor would otherwise wait 10 minutes).
 $SSH "$TV" '
-  set -e
-  [ -f '"$APP"'/launcherd.py ] || { echo "app files missing after install"; exit 1; }
-  n=0; until python3 '"$APP"'/launcherd.py refresh; do n=$((n+1)); [ $n -ge 3 ] && { echo "refresh failed"; exit 1; }; sleep 3; done
-  mkdir -p /var/lib/webosbrew/backup-custom-launcher
+  A='"$APP"'
+  fail() { echo "DEPLOY FAILED: $1"; rm -f /tmp/custom-launcher.deploying; [ -f "$A/launcherd.py" ] && python3 "$A/launcherd.py" start; exit 1; }
+  [ -f "$A/launcherd.py" ] || fail "app files missing after install"
+  n=0; until python3 "$A/launcherd.py" refresh; do n=$((n+1)); [ $n -ge 3 ] && fail "refresh failed"; sleep 3; done
+  mkdir -p /var/lib/webosbrew/backup-custom-launcher || fail "no backup dir"
   if [ -f /var/lib/webosbrew/init.d/99-autostart ]; then
-    mv /var/lib/webosbrew/init.d/99-autostart /var/lib/webosbrew/backup-custom-launcher/99-autostart.v1
+    mv /var/lib/webosbrew/init.d/99-autostart /var/lib/webosbrew/backup-custom-launcher/99-autostart.v1 || fail "old hook not moved"
   fi
-  chmod 755 /tmp/99-custom-launcher.new
-  mv /tmp/99-custom-launcher.new '"$HOOK"'
+  chmod 755 /tmp/99-custom-launcher.new && mv /tmp/99-custom-launcher.new '"$HOOK"' || fail "boot hook not installed"
   rm -f /tmp/custom-launcher.ipk
-  python3 '"$APP"'/launcherd.py start
+  python3 "$A/launcherd.py" start || fail "helper did not start"
   rm -f /tmp/custom-launcher.deploying
   sleep 1
-  python3 '"$APP"'/launcherd.py status'
+  python3 "$A/launcherd.py" status'
 
 # 5. load the new code
 if [ "$1" != "--no-show" ]; then
