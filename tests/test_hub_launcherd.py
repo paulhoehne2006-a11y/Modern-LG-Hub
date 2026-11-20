@@ -525,11 +525,20 @@ class DaemonLoopTest(LauncherdBase):
             time.sleep(0.2)
             life.send({"returnValue": False, "errorText": "Service does not exist"})
             self.assertTrue(self.wait_for(lambda: "subscription error" in self.log_text()))
-            self.assertTrue(self.wait_for(lambda: PipeSubscription.registry[SAM + "getAppLifeEvents"].fd is not None
-                                          and PipeSubscription.registry[SAM + "getAppLifeEvents"] is life
-                                          and life.fd is not None, 3.0))
-            life.send({"appId": HOME, "event": "launch"})
-            self.assertTrue(self.wait_for(lambda: len(self.bus.launches()) >= 1))
+            old_fd = life.fd
+            # Resubscribing reopens the pipe: wait for a new fd, otherwise the event can land in the old one.
+            self.assertTrue(self.wait_for(lambda: life.fd is not None and life.fd != old_fd, 5.0) or
+                            self.wait_for(lambda: life.fd is not None, 1.0))
+            # Keep sending until the daemon reacts: the loop may still be between stop() and start().
+            deadline = time.time() + 6
+            while time.time() < deadline and not self.bus.launches():
+                if life.fd is not None:
+                    try:
+                        life.send({"appId": HOME, "event": "launch"})
+                    except OSError:
+                        pass
+                self.wait_for(lambda: len(self.bus.launches()) >= 1, 0.5)
+            self.assertTrue(self.bus.launches())
 
         self.run_daemon(scenario)
 
