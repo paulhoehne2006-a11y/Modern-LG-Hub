@@ -2136,12 +2136,8 @@
   //   backend=offline|slow   smart=none|offline|mixed   smartdelay=<ms>   weather=error   gemini=error|slow
   //   apps=none (no data/apps.json)   long=1 (very long names)
   if (!IS_TV) {
-    const st = document.createElement('style');
-    const f = (w, file, fam) => '@font-face{font-family:"' + (fam || 'LG Smart UI') + '";font-weight:' + w +
-      ';src:url("../design/fixtures/fonts/' + file + '")}';
-    st.textContent = f(300, 'LG_Smart_UI-Light.ttf') + f(400, 'LG_Smart_UI-Regular.ttf') +
-      f(600, 'LG_Smart_UI-SemiBold.ttf') + f(700, 'LG_Smart_UI-Bold.ttf');
-    document.head.appendChild(st);
+    // LG's fonts are not in the repo (licence). The TV has them built in; on the PC the preview uses
+    // "LG Smart UI" only if it is installed locally, otherwise the fallback fonts from style.css.
     state.devices = [
       { id: 'HDMI_1', label: 'HDMI 1', appId: 'com.webos.app.hdmi1', connected: true },
       { id: 'HDMI_2', label: 'HDMI 2', appId: 'com.webos.app.hdmi2', connected: false },

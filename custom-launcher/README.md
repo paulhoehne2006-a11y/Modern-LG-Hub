@@ -16,7 +16,7 @@ TV: LG OLED55G48LW (webOS 10.3.1, gerootet, Homebrew Channel), `root@192.168.178
 | `tools/tv.sh`, `luna.sh`, `key.sh`, `tvshot.sh` | Hilfen: Befehl auf dem TV (mit TTY), Luna-Aufruf, Fernbedienungstaste senden, TV-Bildschirmfoto |
 | `tools/cdp.sh` | Web-Inspector des TVs: JS in der Launcher-Seite ausführen, Tasten, Screenshots |
 | `tools/localshot.sh`, `mkdata.js` | Launcher am PC in einem Headless-Chromium/Edge rendern/bedienen (Vorschau mit echten TV-Daten; findet den Browser selbst, sonst `--browser` oder `LOCALSHOT_BROWSER`) |
-| `design/fixtures/` | Vom TV kopierte Original-Icons, App-Metadaten, LG-Schriften (33 MB, nur für die PC-Vorschau) |
+| `design/fixtures/` | Vom TV kopierte Original-Icons, App-Metadaten (21 MB, nur für die PC-Vorschau). LGs Schriften sind aus Lizenzgründen nicht im Repo: Der TV hat sie eingebaut; für eine originalgetreue PC-Vorschau „LG Smart UI“ lokal installieren (vom TV: `/usr/share/fonts/`), sonst nimmt die Vorschau Ersatzschriften |
 | `audit/` | Bestandsaufnahme des TVs: `privacy.md`, `bloat.md`, `boot.md`, `research.md`, Rohdaten in `raw/`, `blocklist/` |
 | `README.md` | diese Datei |
 
