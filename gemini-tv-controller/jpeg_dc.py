@@ -20,7 +20,8 @@ class JpegError(ValueError):
 
 
 class _Bits:
-    """MSB-first bit reader over entropy-coded data; stops at markers (byte stuffing 0xFF00 removed)."""
+    """MSB-first bit reader over entropy-coded data; stops at markers (byte stuffing 0xFF00 removed).
+    acc only ever holds the n unread bits (a growing int made every shift slower)."""
 
     __slots__ = ("d", "p", "acc", "n", "marker")
 
@@ -28,26 +29,38 @@ class _Bits:
         self.d, self.p, self.acc, self.n, self.marker = data, pos, 0, 0, None
 
     def _fill(self):
-        while self.n <= 24:
-            if self.marker is not None or self.p >= len(self.d):
-                self.acc <<= 8          # feed zeros past the end of the segment
-                self.n += 8
+        d, p, acc, n = self.d, self.p, self.acc, self.n
+        end = len(d)
+        while n <= 24:
+            if self.marker is not None or p >= end:
+                acc <<= 8               # feed zeros past the end of the segment
+                n += 8
                 continue
-            b = self.d[self.p]
+            b = d[p]
             if b == 0xFF:
-                nxt = self.d[self.p + 1] if self.p + 1 < len(self.d) else 0
+                nxt = d[p + 1] if p + 1 < end else 0
                 if nxt == 0x00:
-                    self.p += 2
+                    p += 2
                 elif nxt == 0xFF:       # fill bytes
-                    self.p += 1
+                    p += 1
                     continue
                 else:
                     self.marker = nxt
                     continue
             else:
-                self.p += 1
-            self.acc = (self.acc << 8) | b
-            self.n += 8
+                p += 1
+            acc = (acc << 8) | b
+            n += 8
+        self.p, self.acc, self.n = p, acc, n
+
+    def peek(self, k: int) -> int:
+        if self.n < k:
+            self._fill()
+        return (self.acc >> (self.n - k)) & ((1 << k) - 1)
+
+    def skip(self, k: int) -> None:
+        self.n -= k
+        self.acc &= (1 << self.n) - 1
 
     def bits(self, k: int) -> int:
         if k == 0:
@@ -55,10 +68,9 @@ class _Bits:
         if self.n < k:
             self._fill()
         self.n -= k
-        return (self.acc >> self.n) & ((1 << k) - 1)
-
-    def bit(self) -> int:
-        return self.bits(1)
+        v = self.acc >> self.n
+        self.acc &= (1 << self.n) - 1
+        return v
 
     def reset(self):
         """After an RSTn marker: drop leftover bits and skip the marker."""
@@ -76,23 +88,42 @@ class _Bits:
         self.marker = None
 
 
-def _huff_table(counts: bytes, symbols: bytes) -> Dict[Tuple[int, int], int]:
-    table, code, k = {}, 0, 0
+FAST_BITS = 9
+
+
+def _huff_table(counts: bytes, symbols: bytes):
+    """(fast, slow): fast[next 9 bits] = length*256 + symbol for codes up to 9 bits (0 = longer code),
+    slow[(length, code)] = symbol for the rest."""
+    fast = [0] * (1 << FAST_BITS)
+    slow: Dict[Tuple[int, int], int] = {}
+    code, k = 0, 0
     for length in range(1, 17):
         for _ in range(counts[length - 1]):
-            table[(length, code)] = symbols[k]
+            sym = symbols[k]
+            if length <= FAST_BITS:
+                shift = FAST_BITS - length
+                base = code << shift
+                for i in range(1 << shift):
+                    fast[base + i] = length * 256 + sym
+            else:
+                slow[(length, code)] = sym
             code += 1
             k += 1
         code <<= 1
-    return table
+    return fast, slow
 
 
 def _decode(bits: _Bits, table) -> int:
-    code = 0
-    for length in range(1, 17):
-        code = (code << 1) | bits.bit()
-        sym = table.get((length, code))
+    fast, slow = table
+    e = fast[bits.peek(FAST_BITS)]
+    if e:
+        bits.skip(e >> 8)
+        return e & 255
+    v = bits.peek(16)
+    for length in range(FAST_BITS + 1, 17):
+        sym = slow.get((length, v >> (16 - length)))
         if sym is not None:
+            bits.skip(length)
             return sym
     raise JpegError("bad huffman code")
 

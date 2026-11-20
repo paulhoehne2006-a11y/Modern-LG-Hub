@@ -95,10 +95,20 @@ class ColourTest(unittest.TestCase):
         c = sa.dominant_color(jpeg_dc.dc_pixels(ORANGE_BASELINE))
         self.assertIsNotNone(c)
         r, g, b = c
-        self.assertGreater(r, 200)       # the orange, not the dark grey half
+        self.assertGreater(r, 180)       # the orange, not the dark grey half
         self.assertLess(b, 70)
         t = sa.dominant_color(jpeg_dc.dc_pixels(TEAL_PROGRESSIVE))
         self.assertGreater(t[1], t[0] + 80)
+
+    def test_small_vivid_accent_beats_large_dull_area(self):
+        # Drake "More Life": a big warm photo, a small blue title; Spotify's lyrics background is blue
+        photo = [(183.0, 128.0, 90.0)] * 150 + [(80.0, 59.0, 45.0)] * 60
+        title = [(10.0, 70.0, 120.0)] * 40
+        black = [(3.0, 3.0, 3.0)] * 750
+        r, g, b = sa.dominant_color(photo + title + black)
+        self.assertGreater(b, r + 60)
+        old = sa._mean_color(photo + title + black)                         # the old average: brown or grey, never blue
+        self.assertTrue(old is None or old[0] > old[2])
 
     def test_grey_cover_is_neutral(self):
         self.assertIsNone(sa.dominant_color(jpeg_dc.dc_pixels(GREY_BASELINE)))
@@ -197,7 +207,8 @@ class FakeClient:
 def playing(track="t1", cover="https://i.scdn.co/image/a", dev_type="TV", is_playing=True):
     return {"is_playing": is_playing, "device": {"name": "Fernseher", "type": dev_type},
             "item": {"id": track, "name": "Song " + track, "artists": [{"name": "X"}],
-                     "album": {"images": [{"url": cover + "640", "width": 640}, {"url": cover, "width": 64}]}}}
+                     "album": {"images": [{"url": cover + "640", "width": 640}, {"url": cover, "width": 300},
+                                          {"url": cover + "64", "width": 64}]}}}
 
 
 COLOURS = {"https://i.scdn.co/image/a": (240.0, 120.0, 40.0), "https://i.scdn.co/image/b": (20.0, 60.0, 230.0)}
@@ -411,9 +422,11 @@ class SpotifyClientTest(unittest.TestCase):
         err = urllib.error.HTTPError("u", 429, "Too Many", {}, None)
         self.assertEqual(sa._retry_after(err), 30.0)
 
-    def test_cover_prefers_smallest_image(self):
-        self.assertEqual(sa._cover_url(playing()["item"]), "https://i.scdn.co/image/a")
-        self.assertEqual(sa._cover_url({"images": [{"url": "https://x/1", "width": 300}]}), "https://x/1")
+    def test_cover_takes_the_300px_image(self):
+        imgs = {"images": [{"url": "https://x/640", "width": 640}, {"url": "https://x/300", "width": 300},
+                           {"url": "https://x/64", "width": 64}]}
+        self.assertEqual(sa._cover_url(imgs), "https://x/300")
+        self.assertEqual(sa._cover_url({"images": [{"url": "https://x/64", "width": 64}]}), "https://x/64")
         self.assertEqual(sa._cover_url({}), "")
 
 

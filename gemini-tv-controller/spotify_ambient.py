@@ -3,7 +3,7 @@ Spotify ambilight: one WiZ lamp takes the dominant colour of the cover of the so
 playing on Spotify and fades over on every song change.
 
     worker thread   polls GET /me/player every POLL_PLAYING s (Spotify Web API, PKCE token from
-                    spotify_login.py), computes the colour of the smallest cover once per track,
+                    spotify_login.py), computes the colour of the ~300 px cover once per track,
                     applies the calibration and fades the lamp over FADE_STEPS steps.
     REST            server.py exposes status(), set_mode(), set_calibration(), set_lamp().
 
@@ -54,6 +54,7 @@ DEFAULTS = {"mode": "tv", "saturation": 1.4, "brightness": 35, "hue_shift": 0, "
 NEUTRAL_KELVIN = 4000     # grey covers
 PREVIEW_SAMPLE = (241, 118, 38)   # preview colour before any cover was seen
 DEFAULT_LAMP_NAME = "Fernseher Bar"
+COVER_WIDTH = 250         # cover image used for the colour (Spotify offers 64 / 300 / 640)
 
 
 def _log(msg: str) -> None:
@@ -70,7 +71,45 @@ def _lum(c) -> float:
     return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255.0
 
 
+HUE_BINS = 24
+ACCENT_MIN = 0.012        # hue "mass" per sample a cover needs for an accent colour
+
+
 def dominant_color(pixels: List[Tuple[float, float, float]]) -> Optional[Tuple[float, float, float]]:
+    """The colour Spotify would pick: the strongest hue, not the average of the area.
+
+    Every sample votes for its hue with its HSL saturation squared (damped for near-black and
+    near-white), so a small but vivid title (Drake "More Life": blue letters on a big brown photo)
+    beats a large dull area, like Spotify's lyrics background does. The colour is the weighted mean
+    of that hue +-15 deg. Covers without a clear hue get their saturation-weighted mean colour
+    (_mean_color, the launcher's accentOf rule); None for grey covers."""
+    hist = [0.0] * HUE_BINS
+    samples = []
+    for c in pixels:
+        h, l, s = colorsys.rgb_to_hls(*(max(0.0, min(255.0, x)) / 255.0 for x in c))
+        if l < 0.04 or l > 0.97 or s < 0.1:
+            continue
+        w = s * s * min(1.0, l / 0.25) * min(1.0, (1.0 - l) / 0.2)
+        b = int(h * HUE_BINS) % HUE_BINS
+        hist[b] += w
+        samples.append((c, b, w))
+    if samples:
+        smooth = [hist[i - 1] * 0.5 + hist[i] + hist[(i + 1) % HUE_BINS] * 0.5 for i in range(HUE_BINS)]
+        peak = max(range(HUE_BINS), key=lambda i: smooth[i])
+        if smooth[peak] / len(pixels) >= ACCENT_MIN:
+            acc, ws = [0.0, 0.0, 0.0], 0.0
+            for c, b, w in samples:
+                if min((b - peak) % HUE_BINS, (peak - b) % HUE_BINS) <= 1:
+                    ws += w
+                    acc[0] += c[0] * w
+                    acc[1] += c[1] * w
+                    acc[2] += c[2] * w
+            if ws > 0:
+                return (acc[0] / ws, acc[1] / ws, acc[2] / ws)
+    return _mean_color(pixels)
+
+
+def _mean_color(pixels: List[Tuple[float, float, float]]) -> Optional[Tuple[float, float, float]]:
     """Saturation-weighted mean colour (same rule as accentOf() in the launcher's app.js).
     None if the artwork is grey (too little saturated, very dark or very bright area)."""
     w, acc = 0.0, [0.0, 0.0, 0.0]
@@ -281,7 +320,12 @@ def _cover_url(item: Dict[str, Any]) -> str:
     imgs = [i for i in imgs if isinstance(i, dict) and isinstance(i.get("url"), str)]
     if not imgs:
         return ""
-    return min(imgs, key=lambda i: i.get("width") or 10 ** 6)["url"]
+    # ~300 px: small titles and accents survive (in the 64 px image they blur into the background),
+    # and it decodes in ~50 ms. The smallest one at least COVER_WIDTH wide, else the largest.
+    big = [i for i in imgs if (i.get("width") or 0) >= COVER_WIDTH]
+    if big:
+        return min(big, key=lambda i: i.get("width") or 0)["url"]
+    return max(imgs, key=lambda i: i.get("width") or 0)["url"]
 
 
 def fetch_cover_color(url: str) -> Optional[Tuple[float, float, float]]:
