@@ -41,9 +41,12 @@ API = "https://api.spotify.com/v1"
 LOGIN_TIMEOUT = 300        # s to finish the login in the browser
 
 
-def client_id() -> str:
+if HERE not in sys.path:
     sys.path.insert(0, HERE)
-    import localhome                     # .env reader shared with the backend
+
+
+def client_id() -> str:
+    import localhome                     # .env reader shared with the backend (cached, cheap)
     return (localhome.env_value("SPOTIFY_CLIENT_ID") or "").strip()
 
 
@@ -208,7 +211,6 @@ def main(argv) -> int:
         if not (len(cid) == 32 and all(c in "0123456789abcdef" for c in cid.lower())):
             print("Client-ID sieht falsch aus (32 Hex-Zeichen erwartet).", file=sys.stderr)
             return 1
-        sys.path.insert(0, HERE)
         import localhome
         localhome.set_env_value("SPOTIFY_CLIENT_ID", cid)
     cid = cid or client_id()

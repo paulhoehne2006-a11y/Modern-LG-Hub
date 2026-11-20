@@ -46,7 +46,7 @@ Exceptions: smart-home routes answer `{"error": ...}`, `/api/command` answers `{
 ```json
 {"service": "Modern LG Hub Backend", "version": "2.2.0", "launcher_version": "3.8.2",
  "status": "online", "has_gemini_key": true, "has_key": true, "token_required": false,
- "features": ["state", "icon-etag", "smarthome-set", "long-enter", "weather-cache"]}
+ "features": ["state", "icon-etag", "smarthome-set", "long-enter", "weather-cache", "spotify-ambient"]}
 ```
 Cheap; used by the watchdog (`90-gemini-controller.sh`) and the Android LAN discovery (looks for
 `LG Hub` in the body). `has_key` = `has_gemini_key` (added so both endpoints use one name).
@@ -126,6 +126,21 @@ weather_code, temperature_2m_max/min, precipitation_probability_max). Location f
 `WEATHER_LAT` / `WEATHER_LON` / `WEATHER_TZ` (defaults 52.5200 / 13.4050 / Europe/Berlin – set your own in the TV's `.env`); `WEATHER_PLACE` adds a `place` field with the name the launcher shows (e.g. `WEATHER_PLACE=Musterstadt`). Cached
 10 min; on failure the last good forecast (up to 3 h old), else `200 {"error": "<type>: <msg>"}`.
 
+### `GET /api/spotify/ambient` (new in 2.3.0)
+Status of the Spotify ambilight (one WiZ lamp takes the cover colour of the song that plays).
+Answers from memory, never waits on Spotify or the lamp.
+```
+{"mode": "tv", "calibration": {"saturation": 1.4, "brightness": 35, "hue_shift": 0},
+ "lamp": {"id": "<mac>", "name": "Zimmer Fernseher Bar"}, "login": true,
+ "state": "active", "message": "", "active": true, "override": false, "is_playing": true,
+ "device": {"name": "…", "type": "TV"}, "track": {"id", "name", "artist", "cover"},
+ "color": "#f07628", "sent": "#ff6a14", "updated": 1763650000.0}
+```
+`state`: `starting`, `off`, `idle` (nothing / paused / other device, see `message`), `active`,
+`preview`, `lamp_off` (lamp is off, so it is left alone), `override` (the owner changed the lamp:
+hands off until playback ends), `login` (run `spotify_login.py`), `error` (`message` says what).
+`color` = dominant cover colour, `sent` = after calibration. 503 if the module failed to load.
+
 ## POST endpoints
 
 All answer `200` with the action result unless noted. `success` mirrors luna `returnValue`.
@@ -145,6 +160,9 @@ All answer `200` with the action result unless noted. `success` mirrors luna `re
 | `/api/smarthome/set` | `{"deviceId"\|"id", "state": "on"\|"off" (default "on"), "brightness": 10–100, "color": "#rrggbb", "kelvin": 2200–6500}`; colour wins over kelvin; values clamped; brightness/colour/kelvin only with "on" and only for WiZ | same as toggle; bad id → `400 {"error": "deviceId fehlt oder ist ungültig"}`, bad colour → 400; unknown device → `{"status": "error", "error": "Unbekanntes Gerät"}` |
 | `/api/command` | `{"prompt": "…", "history": [{"role": "user"\|"model", "text": "…"}]}` (prompt ≤ 2000 chars used, last 12 turns sent) | `{"text", "actions": [{"tool", "args", "result"}], "suggestions": [≤3], "prompt"}`; no key: `{"text", "actions": [], "needs_key": true}`; HTTP errors from Gemini: German `text` + `details` (Google's error body, key scrubbed); empty prompt → `400 {"text": "Leere Anfrage.", "actions": []}` |
 | `/api/key` | `{"api_key": "…"}` (`[A-Za-z0-9_-]{10,200}`) | `{"success": true, "has_key": true}`; empty → `{"success": false, "has_key": …}`; bad format → 400; file error → 500. Stored in `.env` (atomic, mode 0600, other lines kept); never returned |
+| `/api/spotify/ambient/mode` | `{"mode": "off"\|"tv"\|"all"}` – `tv`: only when the active Spotify device is a TV | status (as GET) + `success`; other values → 400 |
+| `/api/spotify/ambient/calibration` | any of `{"saturation": 0–3 (factor), "brightness": 10–100 (%), "hue_shift": -180–180 (°), "preview": true}`; values clamped | status + `success`; non-numbers → 400. `preview` (default true) shows the result on the lamp at once, also while nothing plays (then for 10 s, with the last cover colour) |
+| `/api/spotify/ambient/lamp` | `{"id": "<mac of a WiZ lamp>"}` | status + `success`; unknown id or not a WiZ lamp → 400 |
 
 Every POST drops the status cache, so the next `/api/status` shows the effect.
 
@@ -163,6 +181,7 @@ blocked answers all come back as German `text` (never an HTTP error). The key tr
 | Name | Meaning |
 |---|---|
 | `GEMINI_API_KEY` | Gemini key (also settable via `/api/key`) |
+| `SPOTIFY_CLIENT_ID` | Client ID of your Spotify app (Spotify ambilight); `spotify_login.py --client-id <id>` writes it. The refresh token lives in `spotify-token.json`, the ambilight settings in `spotify-ambient.json` (both gitignored, next to `server.py`) |
 | `GEMINI_MODEL` | model id (default `gemini-3.8-flash`) |
 | `GEMINI_TIMEOUT` | seconds per Gemini request, 3–55 (default 12) |
 | `GEMINI_TOKEN` | optional shared secret for LAN clients (`X-Hub-Token`) |

@@ -44,8 +44,13 @@ from typing import Any, Dict, Optional
 from tv import LGTV, APP_MAP, KEY_MAP, ICON_TYPES, apps_version
 from agent import GeminiTVAgent, get_api_key, save_api_key, _env_value
 import localhome                      # local WiZ/Tapo control (replaces the SmartThings cloud)
+try:
+    import spotify_ambient            # Spotify cover colour on a WiZ lamp
+except Exception as _e:              # a broken optional feature must not take the hub down
+    spotify_ambient = None
+    print(f"spotify_ambient not loaded: {_e}", file=sys.stderr)
 
-SERVER_VERSION = "2.2.0"
+SERVER_VERSION = "2.3.0"
 SERVICE_NAME = "Modern LG Hub Backend"     # the Android app's discovery looks for "LG Hub"
 PORT = int(os.environ.get("GEMINI_PORT", "8080"))
 BIND = os.environ.get("GEMINI_BIND", "0.0.0.0")
@@ -412,7 +417,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "has_gemini_key": bool(get_api_key()),
                 "has_key": bool(get_api_key()),          # same name as in /api/status
                 "token_required": bool(_env_value("GEMINI_TOKEN")),
-                "features": ["state", "icon-etag", "smarthome-set", "long-enter", "weather-cache"],
+                "features": ["state", "icon-etag", "smarthome-set", "long-enter", "weather-cache", "spotify-ambient"],
             })
         elif path == "/api/status":
             self._send_json({"has_key": bool(get_api_key()), "tv": LGTV.get_status_cached()})
@@ -439,6 +444,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(localhome.get_dashboard_devices())
         elif path == "/api/weather":
             self._send_json(get_weather())
+        elif path == "/api/spotify/ambient":
+            if spotify_ambient is None:
+                return self._send_json({"error": "Spotify-Ambilight nicht verfügbar"}, 503)
+            self._send_json(spotify_ambient.engine().status())
         else:
             self._send_json({"error": "Nicht gefunden"}, 404)
 
@@ -565,6 +574,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return self._send_json(localhome.set_switch(dev_id, state, bri, color, kelvin))
             self._send_json(localhome.toggle_switch(dev_id))
 
+        elif path.startswith("/api/spotify/ambient/"):
+            self._route_spotify(path[len("/api/spotify/ambient/"):], req_data)
+
         elif path == "/api/picture/mode":
             mode = req_data.get("mode", "game")
             if not isinstance(mode, str) or not _WORD.match(mode.strip()):
@@ -586,6 +598,38 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         else:
             self._send_json({"error": "Nicht gefunden"}, 404)
+
+
+    def _route_spotify(self, what: str, req_data: dict):
+        """Settings only: they are stored and the ambilight thread is woken, nothing waits on the lamp."""
+        if spotify_ambient is None:
+            return self._send_json({"success": False, "error": "Spotify-Ambilight nicht verfügbar"}, 503)
+        eng = spotify_ambient.engine()
+        if what == "mode":
+            mode = req_data.get("mode")
+            if mode not in spotify_ambient.MODES:
+                return self._bad("mode muss off, tv oder all sein")
+            return self._send_json(dict(eng.set_mode(mode), success=True))
+        if what == "calibration":
+            values = {}
+            for key in ("saturation", "brightness", "hue_shift"):
+                v = req_data.get(key)
+                if v is None:
+                    continue
+                if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+                    return self._bad(f"{key} muss eine Zahl sein")
+                values[key] = v
+            return self._send_json(dict(eng.set_calibration(values, preview=req_data.get("preview", True) is not False),
+                                        success=True))
+        if what == "lamp":
+            dev_id = req_data.get("id")
+            if not isinstance(dev_id, str) or not _DEVICE_ID.match(dev_id):
+                return self._bad("id fehlt oder ist ungültig")
+            try:
+                return self._send_json(dict(eng.set_lamp(dev_id), success=True))
+            except ValueError:
+                return self._bad("Keine WiZ-Lampe mit dieser id")
+        self._send_json({"success": False, "error": "Nicht gefunden"}, 404)
 
 
 class ThreadingServer(socketserver.ThreadingMixIn, HTTPServer):
@@ -643,6 +687,11 @@ class ThreadingServer(socketserver.ThreadingMixIn, HTTPServer):
 
 def run_server():
     httpd = ThreadingServer((BIND, PORT), RequestHandler)
+    if spotify_ambient is not None:
+        try:
+            spotify_ambient.start()
+        except Exception as e:
+            _log(f"spotify ambilight not started: {type(e).__name__}: {e}")
     print(f"Modern LG Hub Backend {SERVER_VERSION} running on {BIND}:{PORT}", flush=True)
     try:
         httpd.serve_forever()

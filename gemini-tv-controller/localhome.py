@@ -707,12 +707,27 @@ def invalidate_cache() -> None:
         _cache["dash"] = None
 
 
+_switch_listeners: List[Any] = []
+
+
+def add_switch_listener(fn) -> None:
+    """fn(mac) runs after every switch the owner makes (hub, Gemini, phone app); e.g. the Spotify
+    ambilight hands a lamp back to the owner. Not called for the ambilight's own writes."""
+    if fn not in _switch_listeners:
+        _switch_listeners.append(fn)
+
+
 def set_switch(dev_id: str, state, brightness: Optional[int] = None,
                color: Optional[tuple] = None, kelvin: Optional[int] = None) -> Dict[str, Any]:
     """Switch a device; for WiZ bulbs optionally also brightness, an RGB colour or a white tone (kelvin)."""
     d = _device(dev_id) if valid_id(norm_mac(dev_id)) else None
     if not d:
         return {"status": "error", "error": "Unbekanntes Gerät"}
+    for fn in list(_switch_listeners):
+        try:
+            fn(d["mac"])
+        except Exception as e:
+            _log(f"switch listener failed: {e}")
     on = str(state).lower().strip() in ("on", "an", "ein", "true", "1")
     setter = _wiz_set if d["kind"] == "wiz" else _tapo_set
     try:
