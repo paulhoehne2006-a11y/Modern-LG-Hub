@@ -2,7 +2,9 @@
 Spotify ambilight: one WiZ lamp takes the dominant colour of the cover of the song that is
 playing on Spotify and fades over on every song change.
 
-    worker thread   polls GET /me/player every POLL_PLAYING s (Spotify Web API, PKCE token from
+    worker thread   polls GET /me/player every POLL_PLAYING s, right after a track ends and only
+                    every POLL_IDLE s when nothing plays; a 429 stops all requests for the whole
+                    Retry-After (saved, survives restarts) (Spotify Web API, PKCE token from
                     spotify_login.py), computes the colour of the ~300 px cover once per track,
                     applies the calibration and fades the lamp over FADE_STEPS steps.
     REST            server.py exposes status(), set_mode(), set_calibration(), set_lamp().
@@ -39,8 +41,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(HERE, "spotify-ambient.json")
 API = spotify_login.API
 
-POLL_PLAYING = 1.5        # s between player polls while something plays
-POLL_IDLE = 2.5           # s between polls while nothing plays
+POLL_PLAYING = 5.0        # s between player polls while something plays (sooner when the track ends)
+POLL_TRACK_END = 0.4      # s after the expected end of a track: the next song gets its colour at once
+POLL_MIN = 1.0            # never poll faster than this
+POLL_IDLE = 10.0          # s between polls while nothing plays / paused / another device
+MAX_BLOCK = 86400.0       # longest Retry-After we accept (Spotify sends hours after too many requests)
 POLL_LAMP_OFF = 30.0      # s between lamp checks while music plays but the lamp is off
 PAUSE_GRACE = 6.0         # s of pause/stop before the lamp goes back
 FADE_STEPS = 5
@@ -164,6 +169,9 @@ def _clean(cfg: Dict[str, Any]) -> Dict[str, Any]:
         out["tv_device"] = cfg["tv_device"].strip()[:100]
     if isinstance(cfg.get("saved"), dict):
         out["saved"] = cfg["saved"]
+    b = cfg.get("blocked_until")
+    if isinstance(b, (int, float)) and not isinstance(b, bool) and time.time() < b < time.time() + MAX_BLOCK:
+        out["blocked_until"] = float(b)                  # a 429 ban survives a backend restart
     return out
 
 
@@ -308,9 +316,22 @@ class SpotifyClient:
         raise SpotifyError("login", "Spotify-Login ungültig")
 
 
+def _next_poll(p: Optional[Dict[str, Any]]) -> float:
+    """Seconds to the next poll while a track plays: POLL_PLAYING, or just after the track ends."""
+    try:
+        left = (float(p["item"]["duration_ms"]) - float(p.get("progress_ms") or 0)) / 1000.0
+    except (KeyError, TypeError, ValueError):
+        return POLL_PLAYING
+    return max(POLL_MIN, min(POLL_PLAYING, left + POLL_TRACK_END))
+
+
+def _block_text(until: float) -> str:
+    return "Spotify-Sperre (zu viele Anfragen) bis " + time.strftime("%H:%M", time.localtime(until))
+
+
 def _retry_after(e: urllib.error.HTTPError) -> float:
     try:
-        return max(1.0, min(3600.0, float(e.headers.get("Retry-After") or 30)))
+        return max(1.0, min(MAX_BLOCK, float(e.headers.get("Retry-After") or 30)))
     except (TypeError, ValueError):
         return 30.0
 
@@ -466,7 +487,15 @@ class Ambient:
             self._deactivate("kein Login")
             return 30.0                                  # the token file is looked at again then
         if e.kind == "ratelimit":
+            # every request during the ban can make it longer: none until it is over, not even on wake
+            until = time.time() + e.retry_after
+            with self.lock:
+                self.cfg["blocked_until"] = until
+                save_config(self.cfg)
             _log(f"rate limited, waiting {e.retry_after:.0f} s")
+            if self.active:
+                self._deactivate("Spotify-Sperre")
+            self._status(state="error", message=_block_text(until))
             return e.retry_after
         if e.kind == "network":
             # no internet: keep the colour a while, but don't leave the lamp coloured for good
@@ -512,6 +541,15 @@ class Ambient:
 
         if not self.client.has_login():
             raise SpotifyError("login", "Kein Spotify-Login (spotify_login.py ausführen)")
+        with self.lock:
+            blocked = float(self.cfg.get("blocked_until") or 0)
+        if now < blocked:
+            if in_preview:
+                return self._preview(preview)
+            if self.active:
+                self._deactivate("Spotify-Sperre")
+            self._status(state="error", message=_block_text(blocked))
+            return min(3600.0, blocked - now + 1)
 
         p = self.client.player()
         item = (p or {}).get("item") or None
@@ -540,12 +578,13 @@ class Ambient:
                 return POLL_PLAYING                     # status keeps saying the lamp could not be reset
             why = "Läuft auf einem anderen Gerät" if playing else ("Pausiert" if p else "Nichts läuft")
             self._status(state="idle", message=why)
-            return POLL_PLAYING if p else POLL_IDLE
+            return POLL_IDLE
         self.paused_since = 0.0
 
+        nxt = _next_poll(p)
         if self.override:
             self._status(state="override", message="Lampe manuell geändert, pausiert bis die Wiedergabe endet")
-            return POLL_PLAYING
+            return nxt
 
         tid = item.get("id") or item.get("uri") or item.get("name")
         new_track = tid != self.track_id
@@ -553,18 +592,18 @@ class Ambient:
             self.raw, self.have_raw = self._cover_color(item), True
             self.track_id = tid
         if self.active and not (new_track or cal_dirty or preview):
-            return POLL_PLAYING
+            return nxt
 
         fresh = False
         if not self.active:
             if not new_track and now - self.lamp_checked < POLL_LAMP_OFF:
-                return POLL_PLAYING                     # lamp was off/unreachable: look again later
+                return nxt                              # lamp was off/unreachable: look again later
             if not self._activate():
-                return POLL_PLAYING
+                return nxt
             fresh = True
         elif new_track and not self._lamp_still_on():
             self._hands_off("Lampe wurde ausgeschaltet")
-            return POLL_PLAYING
+            return nxt
 
         with self.lock:
             target = calibrate(self.raw, self.cfg)
@@ -572,7 +611,7 @@ class Ambient:
         self._fade_to(target, FADE_STEPS if slow else 3, FADE_TIME if slow else 0.25)
         self._status(state="active", message="", color=hex_rgb(self.raw) if self.raw else None,
                      sent=hex_rgb(target["rgb"]))
-        return POLL_PLAYING
+        return nxt
 
     def _cover_color(self, item) -> Optional[Tuple[float, float, float]]:
         url = _cover_url(item)

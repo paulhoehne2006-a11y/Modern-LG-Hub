@@ -395,6 +395,35 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.eng._spotify_failed(sa.SpotifyError("login", "abgelaufen"), 0), 30.0)
         self.assertEqual(self.eng.status()["state"], "login")
 
+    def test_rate_limit_ban_sends_nothing_until_it_ends(self):
+        self.client.reply = playing("t1")
+        self.eng.step()
+        self.assertTrue(self.eng.active)
+        self.eng._spotify_failed(sa.SpotifyError("ratelimit", "429", 16850.0), 0)
+        self.assertFalse(self.eng.active)                       # lamp goes back during the ban
+        calls = self.client.calls
+        self.eng.wake.set()
+        delay = self.eng.step()                                 # a wake (setting changed) must not ask Spotify
+        self.assertEqual(self.client.calls, calls)
+        self.assertEqual(delay, 3600.0)
+        self.assertIn("Spotify-Sperre", self.eng.status()["message"])
+        self.assertIn("blocked_until", sa.load_config())        # survives a restart
+        self.eng.cfg["blocked_until"] = time.time() - 1
+        self.eng.step()
+        self.assertEqual(self.client.calls, calls + 1)
+
+    def test_polls_slowly_but_right_after_the_track_ends(self):
+        p = playing("t1")
+        p["item"]["duration_ms"], p["progress_ms"] = 200000, 100000
+        self.assertEqual(sa._next_poll(p), sa.POLL_PLAYING)
+        p["progress_ms"] = 198000
+        self.assertAlmostEqual(sa._next_poll(p), 2.0 + sa.POLL_TRACK_END)
+        p["progress_ms"] = 200000
+        self.assertEqual(sa._next_poll(p), sa.POLL_MIN)
+        self.assertEqual(sa._next_poll(playing("t1")), sa.POLL_PLAYING)   # no duration: default
+        self.client.reply = None
+        self.assertEqual(self.eng.step(), sa.POLL_IDLE)
+
     def test_long_outage_gives_the_lamp_back(self):
         self.client.reply = playing("t1")
         self.eng.step()
@@ -421,6 +450,8 @@ class SpotifyClientTest(unittest.TestCase):
         self.assertEqual(sa._retry_after(err), 42.0)
         err = urllib.error.HTTPError("u", 429, "Too Many", {}, None)
         self.assertEqual(sa._retry_after(err), 30.0)
+        err = urllib.error.HTTPError("u", 429, "Too Many", {"Retry-After": "16850"}, None)
+        self.assertEqual(sa._retry_after(err), 16850.0)         # hours-long bans are real: no 1 h cap
 
     def test_cover_takes_the_300px_image(self):
         imgs = {"images": [{"url": "https://x/640", "width": 640}, {"url": "https://x/300", "width": 300},
