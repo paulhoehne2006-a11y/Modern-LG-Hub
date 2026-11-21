@@ -1229,7 +1229,7 @@
 
   function activateTile(t) {
     if (t.kind === 'display') { screenOff(); return; }
-    if (t.kind === 'spotify') { setAmbientMode(state.ambient && state.ambient.mode !== 'off' ? 'off' : (prefs.ambientMode || 'tv')); popTile(t.id); return; }
+    if (t.kind === 'spotify') { setAmbientMode(state.ambient && state.ambient.mode !== 'off' ? 'off' : ambientOnMode()); popTile(t.id); return; }
     if (t.kind === 'dev') {
       if (t.offline) { toast(t.title + ' ist gerade nicht erreichbar'); popTile(t.id, 'fail'); fetchSmartDevices(); return; }
       smartSet([t.dev], t.dev.state !== 'on', null, t.id);
@@ -1713,20 +1713,21 @@
   /* ------------------------------------------------------------------ */
   const AMBIENT_MODES = [
     { mode: 'off', label: 'Aus', hint: 'Lampe bleibt, wie sie ist' },
-    { mode: 'tv', label: 'Nur TV', hint: 'Spotify auf dem Fernseher' },
-    { mode: 'all', label: 'Alles', hint: 'jedes Spotify-Gerät' }
+    { mode: 'spotify', label: 'Spotify', hint: 'Farbe des Songs, der auf dem TV läuft' },
+    { mode: 'ambilight', label: 'Ambilight', hint: 'Spotify, sonst die Farben vom Bildschirm' }
   ];
-  const AMBIENT_SAMPLE = '#f07628';   // slider colours before any cover was seen
+  const AMBIENT_SAMPLE = '#f07628';   // slider colours before any colour was seen
   const ambientDraft = {};            // calibration values being changed: key -> {value, at}
   let ambientTimer = 0, ambientModeSeq = 0;
 
   const ambientModeLabel = m => (AMBIENT_MODES.find(x => x.mode === m) || AMBIENT_MODES[1]).label;
+  // mode OK switches on: the last one used (older versions saved 'tv' / 'all')
+  const ambientOnMode = () => (AMBIENT_MODES.some(x => x.mode === prefs.ambientMode && x.mode !== 'off') ? prefs.ambientMode : 'spotify');
   const ambientLit = a => (a.state === 'active' || a.state === 'preview') && /^#[0-9a-f]{6}$/i.test(a.sent || '');
-  const ambientTrouble = a => a.mode !== 'off' && (!a.login || a.state === 'login' || a.state === 'error');
+  const ambientTrouble = a => a.mode !== 'off' && a.state === 'error';
 
   function ambientStateText(a) {
     if (a.mode === 'off') return 'Aus';
-    if (!a.login || a.state === 'login') return 'Login fehlt';
     const s = { active: 'aktiv', preview: 'Vorschau', idle: 'wartet', lamp_off: 'Lampe aus', override: 'pausiert',
       error: 'Problem', off: 'Aus', starting: '…' }[a.state] || '…';
     return ambientModeLabel(a.mode) + ' · ' + s;
@@ -1740,11 +1741,10 @@
   // one line saying what the lamp does right now (the backend's message is more specific when there is one)
   function ambientSentence(a) {
     if (a.mode === 'off') return 'Ausgeschaltet – die Lampe bleibt, wie sie ist';
-    if (!a.login || a.state === 'login') return a.message || 'Spotify-Login fehlt (spotify_login.py auf dem TV)';
-    if (a.state === 'active') return 'Die Lampe zeigt die Farbe des Covers';
+    if (a.state === 'active') return a.source === 'screen' ? 'Die Lampe zeigt die Farben vom Bildschirm' : 'Die Lampe zeigt die Farbe des Songs';
     if (a.state === 'preview') return 'Vorschau der Kalibrierung';
     if (a.message) return a.message;
-    return a.mode === 'tv' ? 'Wartet auf Musik vom Fernseher' : 'Wartet auf Musik';
+    return a.mode === 'ambilight' ? 'Wartet auf Musik oder ein Bild' : 'Wartet auf Musik vom Fernseher';
   }
 
   function ambientBillboard(t) {
@@ -1754,7 +1754,7 @@
     if (a.lamp && a.lamp.name) meta.push({ icon: 'bulb', text: a.lamp.name });
     if (ambientTrouble(a)) meta.push({ warn: true, text: ambientStateText(a) });
     return { kicker: 'Smart Home · ' + (a.mode === 'off' ? 'Aus' : ambientModeLabel(a.mode)), title: 'Spotify-Licht', desc: ambientSentence(a), meta,
-      keys: [['OK', a.mode === 'off' ? 'Einschalten (' + ambientModeLabel(prefs.ambientMode || 'tv') + ')' : 'Ausschalten'],
+      keys: [['OK', a.mode === 'off' ? 'Einschalten (' + ambientModeLabel(ambientOnMode()) + ')' : 'Ausschalten'],
         [{ text: 'OK', hold: true }, 'Modus & Kalibrierung']],
       icon: 'music', logo: 'icon round' + (t.on ? ' on' : '') + (t.offline ? ' offline' : ''), lamp: t.lamp,
       glow: t.on ? t.lamp : 'rgb(70,78,96)' };
@@ -2319,10 +2319,11 @@
     if (q.smart === 'none') fake = [];
     const calls = [];
     window.__previewCalls = calls;
-    // spotify=off|login|none (none: an older backend without the feature)
-    const fakeAmbient = { mode: q.spotify === 'off' ? 'off' : 'tv', login: q.spotify !== 'login', state: q.spotify === 'off' ? 'off' : (q.spotify === 'login' ? 'login' : 'active'),
-      message: '', calibration: { saturation: 1.4, brightness: 35, hue_shift: 0 }, lamp: { id: '0a0000000002', name: 'Arbeitszimmer Fernseher Bar' },
-      is_playing: true, device: { name: 'Fernseher', type: 'TV' }, track: { id: 't', name: 'Super Rich Kids', artist: 'Frank Ocean', cover: '' },
+    // spotify=off|error|none (none: an older backend without the feature)
+    const fakeAmbient = { mode: q.spotify === 'off' ? 'off' : 'spotify', state: q.spotify === 'off' ? 'off' : (q.spotify === 'error' ? 'error' : 'active'),
+      message: q.spotify === 'error' ? 'Spotify-App nicht lesbar' : '', calibration: { saturation: 1.4, brightness: 35, hue_shift: 0 },
+      lamp: { id: '0a0000000002', name: 'Arbeitszimmer Fernseher Bar' }, source: 'spotify',
+      track: { name: 'Super Rich Kids', artist: 'Frank Ocean', cover: '' },
       color: '#f07628', sent: '#ff5a0a', active: true, override: false };
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const day = i => new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
@@ -2361,7 +2362,7 @@
             const hs = hexHsv(fakeAmbient.color);
             fakeAmbient.sent = hsvHex(((hs.h + fakeAmbient.calibration.hue_shift) % 360 + 360) % 360, Math.min(1, hs.s * fakeAmbient.calibration.saturation));
           }
-          fakeAmbient.state = fakeAmbient.mode === 'off' ? 'off' : (fakeAmbient.login ? 'active' : 'login');
+          fakeAmbient.state = fakeAmbient.mode === 'off' ? 'off' : (q.spotify === 'error' ? 'error' : 'active');
           return Object.assign(JSON.parse(JSON.stringify(fakeAmbient)), path === '/api/spotify/ambient' ? {} : { success: true });
         });
       }
