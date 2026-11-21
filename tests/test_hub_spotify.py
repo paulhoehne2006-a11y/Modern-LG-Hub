@@ -1,6 +1,6 @@
 """Tests for the Spotify ambilight: JPEG DC reader, colour + calibration, the engine's state machine
-(against a fake WiZ bulb on 127.0.0.1 and a scripted Spotify client) and the REST endpoints.
-Nothing leaves the host; no real lamp or Spotify account is touched."""
+(against a fake WiZ bulb on 127.0.0.1 and a scripted TV source) and the REST endpoints.
+Nothing leaves the host; no real lamp, TV or Spotify account is touched."""
 import base64
 import http.client
 import json
@@ -131,7 +131,7 @@ class ColourTest(unittest.TestCase):
     def test_settings_are_clamped(self):
         c = sa._clean({"mode": "disco", "saturation": 9, "brightness": 0, "hue_shift": -999, "lamp": "AA:BB"})
         self.assertEqual((c["mode"], c["saturation"], c["brightness"], c["hue_shift"], c["lamp"]),
-                         ("tv", 3.0, 10, -180, ""))
+                         ("spotify", 3.0, 10, -180, ""))
         self.assertEqual(sa._clean({"saturation": True})["saturation"], sa.DEFAULTS["saturation"])
 
     def test_restore_params(self):
@@ -188,27 +188,33 @@ class FakeWiz(threading.Thread):
         self.sock.close()
 
 
-class FakeClient:
+class FakeSource:
+    """Scripted TV: what the Spotify app shows, the foreground app, the screen colour."""
+
     def __init__(self):
-        self.reply = None
+        self.sp = None             # dict like TvSource.spotify(), or None (app not running)
+        self.app = "com.custom.launcher"
+        self.screen_color = (30.0, 200.0, 60.0)
         self.error = None
         self.calls = 0
+        self.screens = 0
 
-    def has_login(self):
-        return True
-
-    def player(self):
+    def spotify(self):
         self.calls += 1
         if self.error:
             raise self.error
-        return self.reply
+        return self.sp
+
+    def foreground(self):
+        return self.app
+
+    def screen(self):
+        self.screens += 1
+        return self.screen_color
 
 
-def playing(track="t1", cover="https://i.scdn.co/image/a", dev_type="TV", is_playing=True):
-    return {"is_playing": is_playing, "device": {"name": "Fernseher", "type": dev_type},
-            "item": {"id": track, "name": "Song " + track, "artists": [{"name": "X"}],
-                     "album": {"images": [{"url": cover + "640", "width": 640}, {"url": cover, "width": 300},
-                                          {"url": cover + "64", "width": 64}]}}}
+def playing(track="t1", cover="https://i.scdn.co/image/a", color=None, is_playing=True):
+    return {"playing": is_playing, "color": color, "cover": cover, "title": "Song " + track, "artist": "X"}
 
 
 COLOURS = {"https://i.scdn.co/image/a": (240.0, 120.0, 40.0), "https://i.scdn.co/image/b": (20.0, 60.0, 230.0)}
@@ -234,6 +240,7 @@ class EngineTest(unittest.TestCase):
             mock.patch.object(localhome, "rediscover", lambda *a, **k: {}),
             mock.patch.object(sa, "CONFIG_FILE", os.path.join(self.tmp, "spotify-ambient.json")),
             mock.patch.object(sa, "FADE_TIME", 0.05),
+            mock.patch.object(sa, "FOLLOW_TIME", 0.03),
             mock.patch.object(sa, "PAUSE_GRACE", 0.0),
             mock.patch.object(sa, "fetch_cover_color", lambda url: COLOURS.get(url)),
         ]
@@ -241,8 +248,8 @@ class EngineTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         localhome._file_cache.clear()
-        self.client = FakeClient()
-        self.eng = sa.Ambient(client=self.client)
+        self.src = FakeSource()
+        self.eng = sa.Ambient(source=self.src)
         self.addCleanup(self.eng.sender.close)
 
     def settle(self):
@@ -256,7 +263,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.eng.status()["lamp"]["id"], self.MAC)
 
     def test_song_colour_fade_and_restore(self):
-        self.client.reply = playing("t1")
+        self.src.sp = playing("t1")
         self.eng.step()
         self.settle()
         rgb, dim = self.last_rgb()
@@ -266,67 +273,116 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(self.eng.active)
         self.assertEqual(sa.load_config()["saved"]["temp"], 2700)            # old state remembered on disk
         st = self.eng.status()
-        self.assertEqual(st["state"], "active")
+        self.assertEqual((st["state"], st["source"]), ("active", "spotify"))
         self.assertEqual(st["track"]["name"], "Song t1")
 
         n = len(self.wiz.sets)
         self.eng.step()                                                     # same song: nothing sent
         self.assertEqual(len(self.wiz.sets), n)
 
-        self.client.reply = playing("t2", cover="https://i.scdn.co/image/b")
+        self.src.sp = playing("t2", cover="https://i.scdn.co/image/b")
         self.eng.step()
         self.settle()
         self.assertGreater(self.last_rgb()[0][2], 200)                       # blue now
 
-        self.client.reply = playing("t2", cover="https://i.scdn.co/image/b", is_playing=False)
+        self.src.sp = playing("t2", cover="https://i.scdn.co/image/b", is_playing=False)
         self.eng.step()                                                      # starts the grace period
         self.eng.step()
         self.settle()
         self.assertEqual(self.wiz.sets[-1], {"state": True, "dimming": 40, "temp": 2700})
         self.assertFalse(self.eng.active)
         self.assertNotIn("saved", sa.load_config())
+        self.assertEqual(self.eng.status()["message"], "Spotify pausiert")
 
-    def test_tv_mode_ignores_other_devices(self):
-        self.client.reply = playing("t1", dev_type="Smartphone")
+    def test_spotify_own_colour_wins_and_is_followed(self):
+        self.src.sp = playing("t1", color=(248.0, 80.0, 168.0))              # cover would be orange
+        self.eng.step()
+        self.settle()
+        r, g, b = self.last_rgb()[0]
+        self.assertGreater(b, g)                                             # pink, not orange
+        self.assertEqual(self.eng.status()["color"], "#f850a8")
+        n = len(self.wiz.sets)
+        self.src.sp = playing("t1", color=(250.0, 82.0, 166.0))              # noise: nothing sent
+        self.eng.step()
+        self.settle()
+        self.assertEqual(len(self.wiz.sets), n)
+        self.src.sp = playing("t1", color=(40.0, 80.0, 248.0))               # Spotify's background fades over
+        self.eng.step()
+        self.settle()
+        self.assertGreater(self.last_rgb()[0][2], 200)
+
+    def test_spotify_mode_ignores_the_screen(self):
+        self.src.app = "netflix"
         self.eng.step()
         self.settle()
         self.assertEqual(self.wiz.sets, [])
+        self.assertEqual(self.src.screens, 0)
         self.assertEqual(self.eng.status()["state"], "idle")
-        self.eng.set_mode("all")
+
+    def test_ambilight_follows_the_screen(self):
+        self.eng.set_mode("ambilight")
+        self.src.app = "netflix"
+        self.assertEqual(self.eng.step(), sa.POLL_SCREEN)
+        self.settle()
+        self.assertGreater(self.last_rgb()[0][1], 200)
+        self.assertEqual(self.eng.status()["source"], "screen")
+        self.src.screen_color = (230.0, 30.0, 30.0)
         self.eng.step()
         self.settle()
-        self.assertTrue(self.wiz.sets)
-
-    def test_tv_mode_with_a_configured_device_name(self):
-        with self.eng.lock:
-            self.eng.cfg["tv_device"] = "Anderer TV"
-        self.client.reply = playing("t1")
+        self.assertGreater(self.last_rgb()[0][0], 200)
+        self.src.sp = playing("t1")                                          # music wins over the screen
         self.eng.step()
-        self.assertEqual(self.wiz.sets, [])
+        self.assertEqual(self.eng.status()["source"], "spotify")
+        self.src.sp = None
+        self.src.app = "com.custom.launcher"                                 # the hub itself: lamp goes back
+        self.eng.step()
+        self.eng.step()
+        self.settle()
+        self.assertEqual(self.wiz.sets[-1], {"state": True, "dimming": 40, "temp": 2700})
+
+    def test_ambilight_notices_a_lamp_switched_off(self):
+        self.eng.set_mode("ambilight")
+        self.src.app = "netflix"
+        self.eng.step()
+        self.wiz.pilot["state"] = False
+        self.eng.lamp_checked -= sa.LAMP_CHECK + 1
+        self.src.screen_color = (230.0, 30.0, 30.0)
+        n = len(self.wiz.sets)
+        self.eng.step()
+        self.assertTrue(self.eng.override)
+        self.assertEqual(len(self.wiz.sets), n)                             # not switched back on
+
+    def test_grey_screen_is_neutral_white(self):
+        self.eng.set_mode("ambilight")
+        self.src.app = "hdmi"
+        self.src.screen_color = None
+        self.eng.step()
+        self.settle()
+        self.assertEqual(self.wiz.sets[-1]["temp"], sa.NEUTRAL_KELVIN)
 
     def test_lamp_off_is_left_alone(self):
         self.wiz.pilot["state"] = False
-        self.client.reply = playing("t1")
+        self.src.sp = playing("t1")
         self.eng.step()
         self.settle()
         self.assertEqual(self.wiz.sets, [])
         self.assertEqual(self.eng.status()["state"], "lamp_off")
-        self.client.reply = playing("t2")                                   # next song looks again
+        self.src.sp = playing("t2", cover="https://i.scdn.co/image/b")       # next song looks again
         self.wiz.pilot["state"] = True
         self.eng.step()
         self.settle()
         self.assertTrue(self.wiz.sets)
 
     def test_manual_change_hands_the_lamp_over(self):
-        self.client.reply = playing("t1")
+        self.src.sp = playing("t1")
         self.eng.step()
         self.eng.manual_change(self.MAC)
         self.eng.step()
         self.assertTrue(self.eng.override)
         n = len(self.wiz.sets)
-        self.client.reply = playing("t2", cover="https://i.scdn.co/image/b")
+        self.src.sp = playing("t2", cover="https://i.scdn.co/image/b")
         self.eng.step()
-        self.client.reply = None                                            # stopped
+        self.src.sp = None                                                  # stopped
         self.eng.step()
         self.eng.step()
         self.settle()
@@ -334,27 +390,26 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(self.eng.override)
 
     def test_lamp_switched_off_between_songs_is_override(self):
-        self.client.reply = playing("t1")
+        self.src.sp = playing("t1")
         self.eng.step()
         self.wiz.pilot["state"] = False
         n = len(self.wiz.sets)
-        self.client.reply = playing("t2", cover="https://i.scdn.co/image/b")
+        self.src.sp = playing("t2", cover="https://i.scdn.co/image/b")
         self.eng.step()
         self.assertTrue(self.eng.override)
         self.assertEqual(len(self.wiz.sets), n)
 
     def test_mode_off_gives_the_lamp_back(self):
-        self.client.reply = playing("t1")
+        self.src.sp = playing("t1")
         self.eng.step()
         self.eng.set_mode("off")
         delay = self.eng.step()
         self.settle()
         self.assertEqual(self.wiz.sets[-1], {"state": True, "dimming": 40, "temp": 2700})
         self.assertGreaterEqual(delay, 60)
-        self.assertEqual(self.client.calls, 1)                               # no polling while off
+        self.assertEqual(self.src.calls, 1)                                  # nothing read while off
 
     def test_calibration_preview_while_nothing_plays(self):
-        self.client.reply = None
         self.eng.set_calibration({"brightness": 80, "hue_shift": 30})
         self.eng.step()
         self.settle()
@@ -367,18 +422,17 @@ class EngineTest(unittest.TestCase):
 
     def test_pending_restore_after_restart(self):
         sa.save_config(dict(sa.DEFAULTS, saved={"state": True, "dimming": 55, "sceneId": 6, "mac": self.MAC}))
-        eng = sa.Ambient(client=self.client)
+        eng = sa.Ambient(source=self.src)
         self.addCleanup(eng.sender.close)
-        self.client.reply = None
         eng.step()
         self.assertEqual(self.wiz.sets[-1], {"state": True, "dimming": 55, "sceneId": 6})
         self.assertNotIn("saved", sa.load_config())
 
     def test_unreachable_lamp_on_restore_is_retried(self):
-        self.client.reply = playing("t1")
+        self.src.sp = playing("t1")
         self.eng.step()
         self.wiz.silent = True
-        self.client.reply = None
+        self.src.sp = None
         self.eng.step()
         self.eng.step()
         self.assertIn("saved", sa.load_config())
@@ -388,53 +442,22 @@ class EngineTest(unittest.TestCase):
         self.eng.step()
         self.assertNotIn("saved", sa.load_config())
 
-    def test_spotify_errors(self):
-        self.assertEqual(self.eng._spotify_failed(sa.SpotifyError("ratelimit", "429", 17.0), 0), 17.0)
-        self.assertEqual(self.eng._spotify_failed(sa.SpotifyError("network"), 0), sa.BACKOFF[0])
-        self.assertEqual(self.eng._spotify_failed(sa.SpotifyError("network"), 99), sa.BACKOFF[-1])
-        self.assertEqual(self.eng._spotify_failed(sa.SpotifyError("login", "abgelaufen"), 0), 30.0)
-        self.assertEqual(self.eng.status()["state"], "login")
-
-    def test_rate_limit_ban_sends_nothing_until_it_ends(self):
-        self.client.reply = playing("t1")
+    def test_unreadable_spotify_counts_as_stopped(self):
+        self.src.sp = playing("t1")
         self.eng.step()
-        self.assertTrue(self.eng.active)
-        self.eng._spotify_failed(sa.SpotifyError("ratelimit", "429", 16850.0), 0)
-        self.assertFalse(self.eng.active)                       # lamp goes back during the ban
-        calls = self.client.calls
-        self.eng.wake.set()
-        delay = self.eng.step()                                 # a wake (setting changed) must not ask Spotify
-        self.assertEqual(self.client.calls, calls)
-        self.assertEqual(delay, 3600.0)
-        self.assertIn("Spotify-Sperre", self.eng.status()["message"])
-        self.assertIn("blocked_until", sa.load_config())        # survives a restart
-        self.eng.cfg["blocked_until"] = time.time() - 1
+        self.src.error = sa.SourceError("Spotify-App nicht lesbar")
         self.eng.step()
-        self.assertEqual(self.client.calls, calls + 1)
-
-    def test_polls_slowly_but_right_after_the_track_ends(self):
-        p = playing("t1")
-        p["item"]["duration_ms"], p["progress_ms"] = 200000, 100000
-        self.assertEqual(sa._next_poll(p), sa.POLL_PLAYING)
-        p["progress_ms"] = 198000
-        self.assertAlmostEqual(sa._next_poll(p), 2.0 + sa.POLL_TRACK_END)
-        p["progress_ms"] = 200000
-        self.assertEqual(sa._next_poll(p), sa.POLL_MIN)
-        self.assertEqual(sa._next_poll(playing("t1")), sa.POLL_PLAYING)   # no duration: default
-        self.client.reply = None
-        self.assertEqual(self.eng.step(), sa.POLL_IDLE)
-
-    def test_long_outage_gives_the_lamp_back(self):
-        self.client.reply = playing("t1")
         self.eng.step()
-        self.eng._spotify_failed(sa.SpotifyError("network"), 0)
-        self.assertTrue(self.eng.active)
-        self.eng.paused_since -= sa.NO_NET_RESTORE + 1
-        self.eng._spotify_failed(sa.SpotifyError("network"), 1)
         self.assertFalse(self.eng.active)
+        self.assertEqual(self.eng.status()["message"], "Spotify-App nicht lesbar")
+
+    def test_old_modes_are_migrated(self):
+        self.assertEqual(sa._clean({"mode": "tv"})["mode"], "spotify")
+        self.assertEqual(sa._clean({"mode": "all"})["mode"], "spotify")
+        self.assertEqual(sa._clean({"mode": "ambilight"})["mode"], "ambilight")
 
     def test_worker_survives_exceptions(self):
-        self.client.error = RuntimeError("boom")
+        self.src.error = RuntimeError("boom")
         self.eng.start()
         time.sleep(0.2)
         self.assertTrue(self.eng.thread.is_alive())
@@ -443,22 +466,49 @@ class EngineTest(unittest.TestCase):
         self.eng.wake.set()
 
 
-class SpotifyClientTest(unittest.TestCase):
-    def test_429_reads_retry_after(self):
-        import urllib.error
-        err = urllib.error.HTTPError("u", 429, "Too Many", {"Retry-After": "42"}, None)
-        self.assertEqual(sa._retry_after(err), 42.0)
-        err = urllib.error.HTTPError("u", 429, "Too Many", {}, None)
-        self.assertEqual(sa._retry_after(err), 30.0)
-        err = urllib.error.HTTPError("u", 429, "Too Many", {"Retry-After": "16850"}, None)
-        self.assertEqual(sa._retry_after(err), 16850.0)         # hours-long bans are real: no 1 h cap
+class TvSourceTest(unittest.TestCase):
+    def test_css_colour(self):
+        self.assertEqual(sa.parse_css_rgb("rgb(248, 80, 168)"), (248.0, 80.0, 168.0))
+        self.assertEqual(sa.parse_css_rgb("rgba(1, 2, 3, 1)"), (1.0, 2.0, 3.0))
+        self.assertIsNone(sa.parse_css_rgb("rgba(0, 0, 0, 0)"))
+        self.assertIsNone(sa.parse_css_rgb(""))
+        self.assertIsNone(sa.parse_css_rgb("red"))
 
-    def test_cover_takes_the_300px_image(self):
-        imgs = {"images": [{"url": "https://x/640", "width": 640}, {"url": "https://x/300", "width": 300},
-                           {"url": "https://x/64", "width": 64}]}
-        self.assertEqual(sa._cover_url(imgs), "https://x/300")
-        self.assertEqual(sa._cover_url({"images": [{"url": "https://x/64", "width": 64}]}), "https://x/64")
-        self.assertEqual(sa._cover_url({}), "")
+    def test_evaluate_over_a_websocket(self):
+        """cdp_evaluate against a tiny fake inspector (handshake, one stray frame, the answer)."""
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        self.addCleanup(srv.close)
+        port = srv.getsockname()[1]
+
+        def recv_exact(c, n):
+            data = b""
+            while len(data) < n:
+                data += c.recv(n - len(data))
+            return data
+
+        def serve():
+            c, _ = srv.accept()
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                buf += c.recv(4096)
+            c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+            h = recv_exact(c, 2)
+            n = h[1] & 127
+            if n == 126:
+                n = int.from_bytes(recv_exact(c, 2), "big")
+            mask = recv_exact(c, 4)
+            data = recv_exact(c, n)
+            req = json.loads(bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+            other = json.dumps({"method": "Runtime.executionContextCreated"}).encode()
+            c.sendall(b"\x81" + bytes([len(other)]) + other)                # not ours: skipped
+            body = json.dumps({"id": req["id"], "result": {"result": {"type": "object", "value": {"playing": True}}}}).encode()
+            c.sendall(b"\x81\x7e" + len(body).to_bytes(2, "big") + body)
+            c.close()
+
+        threading.Thread(target=serve, daemon=True).start()
+        self.assertEqual(sa.cdp_evaluate(f"ws://127.0.0.1:{port}/devtools/page/X", "1+1"), {"playing": True})
 
 
 class RestTest(unittest.TestCase):
@@ -477,7 +527,7 @@ class RestTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         localhome._file_cache.clear()
-        eng = sa.Ambient(client=FakeClient())
+        eng = sa.Ambient(source=FakeSource())
         p = mock.patch.object(sa, "_engine", eng)
         p.start()
         self.addCleanup(p.stop)
@@ -499,14 +549,14 @@ class RestTest(unittest.TestCase):
     def test_status_mode_calibration_lamp(self):
         st, data = self.req("GET", "/api/spotify/ambient")
         self.assertEqual(st, 200)
-        self.assertEqual((data["mode"], data["calibration"]["brightness"]), ("tv", 35))
+        self.assertEqual((data["mode"], data["calibration"]["brightness"]), ("spotify", 35))
         self.assertEqual(data["lamp"]["id"], "0a0000000002")
-        self.assertEqual(self.req("POST", "/api/spotify/ambient/mode", {"mode": "all"})[1]["mode"], "all")
+        self.assertEqual(self.req("POST", "/api/spotify/ambient/mode", {"mode": "ambilight"})[1]["mode"], "ambilight")
         self.assertEqual(self.req("POST", "/api/spotify/ambient/mode", {"mode": "x"})[0], 400)
         st, data = self.req("POST", "/api/spotify/ambient/calibration", {"saturation": 2.5, "brightness": 500, "hue_shift": -20})
         self.assertEqual((st, data["calibration"]), (200, {"saturation": 2.5, "brightness": 100, "hue_shift": -20}))
         self.assertEqual(self.req("POST", "/api/spotify/ambient/calibration", {"brightness": "hell"})[0], 400)
-        self.assertEqual(sa.load_config()["mode"], "all")
+        self.assertEqual(sa.load_config()["mode"], "ambilight")
         self.assertEqual(self.req("POST", "/api/spotify/ambient/lamp", {"id": "0a0000000003"})[0], 400)   # a plug
         self.assertEqual(self.req("POST", "/api/spotify/ambient/lamp", {"id": "0a0000000002"})[0], 200)
         self.assertEqual(self.req("POST", "/api/spotify/ambient/nope", {})[0], 404)

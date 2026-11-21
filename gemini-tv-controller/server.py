@@ -45,12 +45,12 @@ from tv import LGTV, APP_MAP, KEY_MAP, ICON_TYPES, apps_version
 from agent import GeminiTVAgent, get_api_key, save_api_key, _env_value
 import localhome                      # local WiZ/Tapo control (replaces the SmartThings cloud)
 try:
-    import spotify_ambient            # Spotify cover colour on a WiZ lamp
+    import spotify_ambient            # Spotify / screen colour on a WiZ lamp
 except Exception as _e:              # a broken optional feature must not take the hub down
     spotify_ambient = None
     print(f"spotify_ambient not loaded: {_e}", file=sys.stderr)
 
-SERVER_VERSION = "2.3.0"
+SERVER_VERSION = "2.4.0"
 SERVICE_NAME = "Modern LG Hub Backend"     # the Android app's discovery looks for "LG Hub"
 PORT = int(os.environ.get("GEMINI_PORT", "8080"))
 BIND = os.environ.get("GEMINI_BIND", "0.0.0.0")
