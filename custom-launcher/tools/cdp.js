@@ -11,8 +11,9 @@
 //
 // Options (before the command):
 //   --app <appId>       page to target (default com.custom.launcher)
-//   --host <host:port>  inspector address (default <TV_HOST without user@>:9998, TV_HOST as in the other
-//                       tools, required; use 127.0.0.1:<port> for local Edge)
+//   --host <host:port>  inspector address; default: an ssh tunnel to the TV's 127.0.0.1:9998 (TV_HOST as
+//                       in the other tools, required; the TV firewalls 9998 to itself, see
+//                       gemini-tv-controller/70-ambient-inspector.sh); use 127.0.0.1:<port> for local Edge
 //   --timeout <ms>      overall timeout (default 30000)
 //   --console           also print console.* output produced while the command runs
 'use strict';
@@ -20,8 +21,7 @@ const fs = require('fs');
 
 const argv = process.argv.slice(2);
 if (!process.env.TV_HOST) { console.error('TV_HOST setzen, z. B. export TV_HOST=root@<TV-IP>'); process.exit(2); }
-const tvHost = process.env.TV_HOST.replace(/^.*@/, '');
-const opt = { app: 'com.custom.launcher', host: tvHost + ':9998', timeout: 30000, console: false };
+const opt = { app: 'com.custom.launcher', host: '', timeout: 30000, console: false };
 while (argv[0] && argv[0].startsWith('--')) {
   const o = argv.shift();
   if (o === '--console') opt.console = true;
@@ -44,8 +44,25 @@ const KEYS = {
 
 function fail(msg) { console.error(msg); process.exit(1); }
 
+// The inspector only answers the TV itself: forward a local port over ssh for this run.
+async function tunnel() {
+  const { spawn } = require('child_process');
+  const port = 19000 + Math.floor(Math.random() * 900);
+  const ssh = spawn('ssh', ['-N', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', '-o', 'ExitOnForwardFailure=yes',
+    '-L', port + ':127.0.0.1:9998', process.env.TV_HOST], { stdio: 'ignore' });
+  process.on('exit', () => { try { ssh.kill(); } catch (e) { /* already gone */ } });
+  let gone = false;
+  ssh.on('exit', () => { gone = true; });
+  for (let i = 0; i < 60 && !gone; i++) {
+    try { await fetch('http://127.0.0.1:' + port + '/json/version'); return '127.0.0.1:' + port; } catch (e) { /* not up yet */ }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  fail('ssh tunnel to the TV inspector did not come up (TV_HOST=' + process.env.TV_HOST + ')');
+}
+
 (async () => {
   const timer = setTimeout(() => fail('timeout after ' + opt.timeout + ' ms'), opt.timeout);
+  if (!opt.host) opt.host = await tunnel();
   let pages;
   try {
     pages = await (await fetch('http://' + opt.host + '/json')).json();
